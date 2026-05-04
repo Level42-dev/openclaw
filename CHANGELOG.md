@@ -65,6 +65,8 @@ Docs: https://docs.openclaw.ai
 - Docs: clarify that IRC uses raw TCP/TLS sockets outside operator-managed forward proxy routing, so direct IRC egress should be explicitly approved before enabling IRC. Thanks @jesse-merhi.
 - Dependencies: refresh runtime and provider packages including Pi 0.73.0, ACPX adapters, OpenAI, Anthropic, Slack, and TypeScript native preview, while keeping the Bedrock runtime installer override pinned below the Windows ARM Node 24 npm resolver failure.
 - Contributor PRs: require external pull requests to include after-fix real behavior proof from a real OpenClaw setup, with terminal screenshots, console output, redacted runtime logs, linked artifacts, and copied live output treated as valid evidence while unit tests, mocks, lint, typechecks, snapshots, and CI remain supplemental only.
+- Sandbox/Windows: accept drive-absolute Docker bind sources while keeping sandbox blocked-path and allowed-root policy comparisons Windows-case-insensitive. (#42174) Thanks @6607changchun.
+- Managed proxy: add `proxy.loopbackMode` for Gateway loopback control-plane traffic, allowing operators to keep the default Gateway loopback bypass, force loopback Gateway traffic through the proxy, or block it. (#77018) Thanks @jesse-merhi.
 
 ### Fixes
 
