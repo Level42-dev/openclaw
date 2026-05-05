@@ -452,7 +452,7 @@ describe("startProxy", () => {
     expect(http.request).toBe(patchedHttpRequest);
 
     const requestDuringBypass = dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-      { actualUrl: "ws://127.0.0.1:18789", expectedGatewayUrl: "ws://127.0.0.1:18789" },
+      "ws://127.0.0.1:18789",
       () => http.request,
     );
 
@@ -465,25 +465,22 @@ describe("startProxy", () => {
   it("allows the Gateway control-plane bypass for literal loopback IPs and localhost", () => {
     expect(
       dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-        { actualUrl: "ws://127.0.0.1:18789", expectedGatewayUrl: "ws://127.0.0.1:18789" },
+        "ws://127.0.0.1:18789",
+        () => "ok",
+      ),
+    ).toBe("ok");
+    expect(
+      dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane("ws://[::1]:18789", () => "ok"),
+    ).toBe("ok");
+    expect(
+      dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
+        "ws://localhost:18789",
         () => "ok",
       ),
     ).toBe("ok");
     expect(
       dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-        { actualUrl: "ws://[::1]:18789", expectedGatewayUrl: "ws://[::1]:18789" },
-        () => "ok",
-      ),
-    ).toBe("ok");
-    expect(
-      dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-        { actualUrl: "ws://localhost:18789", expectedGatewayUrl: "ws://localhost:18789" },
-        () => "ok",
-      ),
-    ).toBe("ok");
-    expect(
-      dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-        { actualUrl: "ws://localhost.:18789", expectedGatewayUrl: "ws://localhost.:18789" },
+        "ws://localhost.:18789",
         () => "ok",
       ),
     ).toBe("ok");
@@ -492,31 +489,16 @@ describe("startProxy", () => {
   it("rejects dangerous Gateway control-plane bypass for non-loopback URLs", () => {
     expect(() =>
       dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-        { actualUrl: "wss://gateway.example.com", expectedGatewayUrl: "wss://gateway.example.com" },
+        "wss://gateway.example.com",
         () => undefined,
       ),
     ).toThrow("loopback-only");
   });
 
-  it("rejects Gateway control-plane bypass for loopback URLs that do not match the configured Gateway URL", () => {
-    expect(() =>
-      dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-        {
-          actualUrl: "ws://127.0.0.1:3000",
-          expectedGatewayUrl: "ws://127.0.0.1:18789",
-        },
-        () => undefined,
-      ),
-    ).toThrow("configured Gateway URL");
-  });
-
   it("allows Gateway control-plane bypass for custom configured loopback ports", () => {
     expect(
       dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-        {
-          actualUrl: "ws://127.0.0.1:3000",
-          expectedGatewayUrl: "ws://127.0.0.1:3000",
-        },
+        "ws://127.0.0.1:3000",
         () => "ok",
       ),
     ).toBe("ok");
@@ -532,10 +514,7 @@ describe("startProxy", () => {
     try {
       expect(() =>
         dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-          {
-            actualUrl: "ws://127.0.0.1:18789",
-            expectedGatewayUrl: "ws://127.0.0.1:18789",
-          },
+          "ws://127.0.0.1:18789",
           () => undefined,
         ),
       ).toThrow("blocked by proxy.loopbackMode");
@@ -554,10 +533,7 @@ describe("startProxy", () => {
     try {
       expect(() =>
         dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-          {
-            actualUrl: "ws://127.0.0.1:18789",
-            expectedGatewayUrl: "ws://127.0.0.1:18789",
-          },
+          "ws://127.0.0.1:18789",
           () => undefined,
         ),
       ).toThrow("disabled by proxy.loopbackMode");
@@ -582,7 +558,7 @@ describe("startProxy", () => {
     process.env["OPENCLAW_PROXY_ACTIVE"] = "1";
 
     const during = dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-      { actualUrl: "ws://localhost:18789", expectedGatewayUrl: "ws://localhost:18789" },
+      "ws://localhost:18789",
       () => ({
         httpProxy: process.env["HTTP_PROXY"],
         httpsProxy: process.env["HTTPS_PROXY"],
@@ -629,7 +605,7 @@ describe("startProxy", () => {
     process.env["ALL_PROXY"] = "http://inherited-all.example.com:8080";
 
     const during = dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-      { actualUrl: "ws://127.0.0.1:18789", expectedGatewayUrl: "ws://127.0.0.1:18789" },
+      "ws://127.0.0.1:18789",
       () => ({
         httpRequest: http.request,
         httpProxy: process.env["HTTP_PROXY"],

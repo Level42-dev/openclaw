@@ -3,12 +3,6 @@ import { resolveGoogleMeetConfig } from "./config.js";
 import { joinMeetViaVoiceCallGateway } from "./voice-call-gateway.js";
 
 const gatewayMocks = vi.hoisted(() => ({
-  request: vi.fn(),
-  stopAndWait: vi.fn(async () => {}),
-  startGatewayClientWhenEventLoopReady: vi.fn(async () => ({ ready: true, aborted: false })),
-}));
-
-vi.mock("openclaw/plugin-sdk/gateway-runtime", () => ({
   GatewayClient: vi.fn(function MockGatewayClient(params: { onHelloOk?: () => void }) {
     queueMicrotask(() => params.onHelloOk?.());
     return {
@@ -16,12 +10,22 @@ vi.mock("openclaw/plugin-sdk/gateway-runtime", () => ({
       stopAndWait: gatewayMocks.stopAndWait,
     };
   }),
+  request: vi.fn(),
+  stopAndWait: vi.fn(async () => {}),
+  startGatewayClientWhenEventLoopReady: vi.fn(async () => ({ ready: true, aborted: false })),
+}));
+
+vi.mock("openclaw/plugin-sdk/gateway-runtime", () => ({
+  GatewayClient: gatewayMocks.GatewayClient,
   startGatewayClientWhenEventLoopReady: gatewayMocks.startGatewayClientWhenEventLoopReady,
 }));
 
 describe("Google Meet voice-call gateway", () => {
   beforeEach(() => {
     vi.useRealTimers();
+    delete process.env.OPENCLAW_PROXY_ACTIVE;
+    delete process.env.OPENCLAW_PROXY_LOOPBACK_MODE;
+    gatewayMocks.GatewayClient.mockClear();
     gatewayMocks.request.mockReset();
     gatewayMocks.request.mockResolvedValue({ callId: "call-1" });
     gatewayMocks.stopAndWait.mockClear();
@@ -76,6 +80,28 @@ describe("Google Meet voice-call gateway", () => {
       { timeoutMs: 30_000 },
     );
     expect(gatewayMocks.request).toHaveBeenCalledTimes(3);
+  });
+
+  it("marks the configured local Gateway URL for managed proxy gateway-only bypass", async () => {
+    process.env.OPENCLAW_PROXY_ACTIVE = "1";
+    process.env.OPENCLAW_PROXY_LOOPBACK_MODE = "gateway-only";
+    const config = resolveGoogleMeetConfig({
+      voiceCall: {
+        gatewayUrl: "ws://127.0.0.1:18789",
+      },
+    });
+
+    await joinMeetViaVoiceCallGateway({
+      config,
+      dialInNumber: "+15551234567",
+    });
+
+    expect(gatewayMocks.GatewayClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "ws://127.0.0.1:18789",
+        configuredGatewayUrl: "ws://127.0.0.1:18789",
+      }),
+    );
   });
 
   it("skips the intro without failing when the realtime bridge is not ready", async () => {

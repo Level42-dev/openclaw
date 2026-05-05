@@ -462,11 +462,6 @@ export async function stopProxy(handle: ProxyHandle | null): Promise<void> {
   await handle.stop();
 }
 
-type GatewayControlPlaneBypassTarget = {
-  actualUrl: string;
-  expectedGatewayUrl: string;
-};
-
 function parseGatewayControlPlaneUrl(value: string): URL | null {
   try {
     return new URL(value);
@@ -488,21 +483,9 @@ function isGatewayLoopbackControlPlaneUrl(value: string): boolean {
   );
 }
 
-function assertExactGatewayControlPlaneBypassTarget(
-  target: GatewayControlPlaneBypassTarget,
-): string {
-  if (!isGatewayLoopbackControlPlaneUrl(target.actualUrl)) {
+function assertGatewayControlPlaneBypassTarget(url: string): void {
+  if (!isGatewayLoopbackControlPlaneUrl(url)) {
     throw new Error("proxy: dangerous Gateway control-plane bypass is loopback-only");
-  }
-  if (!isGatewayLoopbackControlPlaneUrl(target.expectedGatewayUrl)) {
-    throw new Error(
-      "proxy: Gateway control-plane bypass expected Gateway URL must be loopback-only",
-    );
-  }
-  if (target.actualUrl !== target.expectedGatewayUrl) {
-    throw new Error(
-      "proxy: Gateway control-plane bypass requires the actual URL to match the configured Gateway URL",
-    );
   }
   const loopbackMode = getActiveManagedProxyLoopbackMode();
   if (loopbackMode === "block") {
@@ -515,7 +498,6 @@ function assertExactGatewayControlPlaneBypassTarget(
       "proxy: Gateway loopback control-plane bypass is disabled by proxy.loopbackMode",
     );
   }
-  return target.actualUrl;
 }
 
 function isGatewayControlPlaneLoopbackHost(hostname: string): boolean {
@@ -524,10 +506,10 @@ function isGatewayControlPlaneLoopbackHost(hostname: string): boolean {
 }
 
 export function dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane<T>(
-  target: GatewayControlPlaneBypassTarget,
+  url: string,
   run: () => T,
 ): T {
-  assertExactGatewayControlPlaneBypassTarget(target);
+  assertGatewayControlPlaneBypassTarget(url);
 
   const snapshot = nodeHttpStackSnapshot;
   if (!snapshot) {

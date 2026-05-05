@@ -131,7 +131,6 @@ export type GatewayClientOptions = {
    * Config-resolved Gateway URL used to authorize managed-proxy loopback bypass.
    * Per-call URL overrides must not authorize their own direct loopback route.
    */
-  configuredGatewayUrl?: string;
   connectChallengeTimeoutMs?: number;
   /** @deprecated Use connectChallengeTimeoutMs. */
   connectDelayMs?: number;
@@ -306,14 +305,7 @@ export class GatewayClient {
     if (activeLoopbackMode === "block" && loopbackAgent) {
       throw new Error("Gateway loopback connection blocked by proxy.loopbackMode");
     }
-    const configuredGatewayUrl =
-      this.opts.configuredGatewayUrl ??
-      (this.opts.url === undefined ? DEFAULT_GATEWAY_CLIENT_URL : undefined);
-    const managedProxyBypassAllowed =
-      activeLoopbackMode === undefined ||
-      (configuredGatewayUrl !== undefined && url === configuredGatewayUrl);
-    const directAgent =
-      activeLoopbackMode === "proxy" || !managedProxyBypassAllowed ? undefined : loopbackAgent;
+    const directAgent = activeLoopbackMode === "proxy" ? undefined : loopbackAgent;
     const wsOptions: FingerprintCheckingClientOptions = {
       maxPayload: 25 * 1024 * 1024,
       ...(directAgent ? { agent: directAgent } : {}),
@@ -343,14 +335,7 @@ export class GatewayClient {
     }
     const createWebSocket = () => new WebSocket(url, wsOptions as ClientOptions);
     const ws = directAgent
-      ? dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(
-          {
-            actualUrl: url,
-            expectedGatewayUrl:
-              activeLoopbackMode === undefined ? url : (configuredGatewayUrl ?? ""),
-          },
-          createWebSocket,
-        )
+      ? dangerouslyBypassManagedProxyForGatewayLoopbackControlPlane(url, createWebSocket)
       : createWebSocket();
     this.ws = ws;
     this.socketOpened = false;

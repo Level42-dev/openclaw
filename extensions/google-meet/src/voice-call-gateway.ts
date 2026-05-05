@@ -48,6 +48,7 @@ async function createConnectedGatewayClient(
     }, config.voiceCall.requestTimeoutMs);
     client = new GatewayClient({
       url: config.voiceCall.gatewayUrl,
+      configuredGatewayUrl: config.voiceCall.gatewayUrl,
       token: config.voiceCall.token,
       requestTimeoutMs: config.voiceCall.requestTimeoutMs,
       clientName: "cli",
