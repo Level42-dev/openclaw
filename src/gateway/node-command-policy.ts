@@ -128,7 +128,7 @@ const PLATFORM_PREFIX_RULES: ReadonlyArray<{
   { id: "macos", prefixes: ["mac", "darwin"] },
   { id: "windows", prefixes: ["win"] },
   { id: "linux", prefixes: ["linux"] },
-  { id: "embedded", prefixes: ["esp32-s3"] },
+  { id: "embedded", prefixes: ["esp32", "esp32-s3"] },
 ] as const;
 
 const DEVICE_FAMILY_TOKEN_RULES: ReadonlyArray<{
@@ -140,7 +140,7 @@ const DEVICE_FAMILY_TOKEN_RULES: ReadonlyArray<{
   { id: "macos", tokens: ["mac"] },
   { id: "windows", tokens: ["windows"] },
   { id: "linux", tokens: ["linux"] },
-  { id: "embedded", tokens: ["voice-pe", "esp32-s3"] },
+  { id: "embedded", tokens: ["voice-pe", "esp32"] },
 ] as const;
 
 function resolvePlatformIdByPrefix(value: string): Exclude<PlatformId, "unknown"> | undefined {

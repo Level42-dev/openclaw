@@ -24,12 +24,21 @@ export type NodeConnectPairingReconcileResult = {
 
 function resolveApprovedReconnectCommands(params: {
   pairedCommands: readonly string[] | undefined;
+  declaredCommands: readonly string[];
   allowlist: Set<string>;
+  defaultAllowlist: Set<string>;
 }) {
-  return normalizeDeclaredNodeCommands({
+  const pairedCommands = normalizeDeclaredNodeCommands({
     declaredCommands: Array.isArray(params.pairedCommands) ? params.pairedCommands : [],
     allowlist: params.allowlist,
   });
+  const safeDefaultCommands = normalizeDeclaredNodeCommands({
+    declaredCommands: params.declaredCommands.filter((command) =>
+      params.defaultAllowlist.has(command),
+    ),
+    allowlist: params.allowlist,
+  });
+  return [...new Set([...pairedCommands, ...safeDefaultCommands])];
 }
 
 function buildNodePairingRequestInput(params: {
@@ -99,7 +108,9 @@ export async function reconcileNodePairingOnConnect(params: {
 
   const approvedCommands = resolveApprovedReconnectCommands({
     pairedCommands: params.pairedNode.commands,
+    declaredCommands: declared,
     allowlist,
+    defaultAllowlist,
   });
   const safeDefaultCommands = declared.filter((command) => defaultAllowlist.has(command));
   const effectiveApprovedCommands = [

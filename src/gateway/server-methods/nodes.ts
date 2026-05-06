@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getRuntimeConfig } from "../../config/io.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { listDevicePairing } from "../../infra/device-pairing.js";
@@ -86,6 +86,14 @@ const TALK_PTT_COMMANDS = new Set([
   "talk.ptt.once",
 ]);
 const talkPttEventSeqBySessionId = new Map<string, number>();
+
+function formatNodeIdForLog(nodeId: string): string {
+  const normalized = normalizeOptionalString(nodeId) ?? "";
+  if (!normalized) {
+    return "empty";
+  }
+  return `sha256:${createHash("sha256").update(normalized).digest("hex").slice(0, 12)}`;
+}
 
 type NodeWakeNudgeAttempt = {
   sent: boolean;
@@ -1026,14 +1034,15 @@ export const nodeHandlers: GatewayRequestHandlers = {
       let nodeSession = context.nodeRegistry.get(nodeId);
       if (!nodeSession) {
         const wakeReqId = req.id;
+        const nodeLogRef = formatNodeIdForLog(nodeId);
         const wakeFlowStartedAtMs = Date.now();
         context.logGateway.info(
-          `node wake start node=${nodeId} req=${wakeReqId} command=${command}`,
+          `node wake start nodeRef=${nodeLogRef} req=${wakeReqId} command=${command}`,
         );
 
         const wake = await maybeWakeNodeWithApns(nodeId, { cfg });
         context.logGateway.info(
-          `node wake stage=wake1 node=${nodeId} req=${wakeReqId} ` +
+          `node wake stage=wake1 nodeRef=${nodeLogRef} req=${wakeReqId} ` +
             `available=${wake.available} throttled=${wake.throttled} ` +
             `path=${wake.path} durationMs=${wake.durationMs} ` +
             `apnsStatus=${wake.apnsStatus ?? -1} apnsReason=${wake.apnsReason ?? "-"}`,
@@ -1048,7 +1057,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
           });
           const waitDurationMs = Math.max(0, Date.now() - waitStartedAtMs);
           context.logGateway.info(
-            `node wake stage=wait1 node=${nodeId} req=${wakeReqId} ` +
+            `node wake stage=wait1 nodeRef=${nodeLogRef} req=${wakeReqId} ` +
               `reconnected=${reconnected} timeoutMs=${waitTimeoutMs} durationMs=${waitDurationMs}`,
           );
         }
@@ -1056,7 +1065,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
         if (!nodeSession && wake.available) {
           const retryWake = await maybeWakeNodeWithApns(nodeId, { force: true, cfg });
           context.logGateway.info(
-            `node wake stage=wake2 node=${nodeId} req=${wakeReqId} force=true ` +
+            `node wake stage=wake2 nodeRef=${nodeLogRef} req=${wakeReqId} force=true ` +
               `available=${retryWake.available} throttled=${retryWake.throttled} ` +
               `path=${retryWake.path} durationMs=${retryWake.durationMs} ` +
               `apnsStatus=${retryWake.apnsStatus ?? -1} apnsReason=${retryWake.apnsReason ?? "-"}`,
@@ -1071,7 +1080,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
             });
             const waitDurationMs = Math.max(0, Date.now() - waitStartedAtMs);
             context.logGateway.info(
-              `node wake stage=wait2 node=${nodeId} req=${wakeReqId} ` +
+              `node wake stage=wait2 nodeRef=${nodeLogRef} req=${wakeReqId} ` +
                 `reconnected=${reconnected} timeoutMs=${waitTimeoutMs} durationMs=${waitDurationMs}`,
             );
           }
@@ -1081,12 +1090,12 @@ export const nodeHandlers: GatewayRequestHandlers = {
           const totalDurationMs = Math.max(0, Date.now() - wakeFlowStartedAtMs);
           const nudge = await maybeSendNodeWakeNudge(nodeId, { cfg });
           context.logGateway.info(
-            `node wake nudge node=${nodeId} req=${wakeReqId} sent=${nudge.sent} ` +
+            `node wake nudge nodeRef=${nodeLogRef} req=${wakeReqId} sent=${nudge.sent} ` +
               `throttled=${nudge.throttled} reason=${nudge.reason} durationMs=${nudge.durationMs} ` +
               `apnsStatus=${nudge.apnsStatus ?? -1} apnsReason=${nudge.apnsReason ?? "-"}`,
           );
           context.logGateway.warn(
-            `node wake done node=${nodeId} req=${wakeReqId} connected=false ` +
+            `node wake done nodeRef=${nodeLogRef} req=${wakeReqId} connected=false ` +
               `reason=not_connected totalMs=${totalDurationMs}`,
           );
           respond(
@@ -1101,7 +1110,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
 
         const totalDurationMs = Math.max(0, Date.now() - wakeFlowStartedAtMs);
         context.logGateway.info(
-          `node wake done node=${nodeId} req=${wakeReqId} connected=true totalMs=${totalDurationMs}`,
+          `node wake done nodeRef=${nodeLogRef} req=${wakeReqId} connected=true totalMs=${totalDurationMs}`,
         );
       }
       const allowlist = resolveNodeCommandAllowlist(cfg, nodeSession);
@@ -1187,6 +1196,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
         );
         return;
       }
+      const invokeStartedAtMs = Date.now();
       const res = await context.nodeRegistry.invoke({
         nodeId,
         command,
@@ -1195,6 +1205,15 @@ export const nodeHandlers: GatewayRequestHandlers = {
         idempotencyKey: p.idempotencyKey,
       });
       if (!res.ok) {
+        if (res.error?.code === "TIMEOUT") {
+          context.logGateway.warn(
+            `node.invoke timeout req=${req.id} command=${command} ` +
+              `platform=${nodeSession.platform ?? "unknown"} ` +
+              `deviceFamily=${nodeSession.deviceFamily ?? "unknown"} ` +
+              `declaredCommands=${nodeSession.commands.join(",") || "<none>"} ` +
+              `timeoutMs=${p.timeoutMs ?? 30_000} durationMs=${Math.max(0, Date.now() - invokeStartedAtMs)}`,
+          );
+        }
         if (
           shouldQueueAsPendingForegroundAction({
             platform: nodeSession.platform,
@@ -1211,7 +1230,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
           });
           const wake = await maybeWakeNodeWithApns(nodeId, { cfg });
           context.logGateway.info(
-            `node pending queued node=${nodeId} req=${req.id} command=${command} ` +
+            `node pending queued nodeRef=${formatNodeIdForLog(nodeId)} req=${req.id} command=${command} ` +
               `queuedId=${queued.id} wakePath=${wake.path} wakeAvailable=${wake.available}`,
           );
           respond(
