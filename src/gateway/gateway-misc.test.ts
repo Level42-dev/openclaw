@@ -443,6 +443,48 @@ describe("gateway broadcaster", () => {
     ]);
   });
 
+  it("limits Voice PE clients to device-safe broadcasts even with operator.write", () => {
+    const voicePeSocket = makeRecordingSocket();
+    const writeSocket = makeRecordingSocket();
+    const clients = new Set<GatewayWsClient>([
+      makeGatewayWsClient("c-voice-pe", voicePeSocket, {
+        role: "operator",
+        scopes: ["operator.write"],
+        client: { id: "voice-pe", deviceFamily: "voice-pe" },
+      } as GatewayWsClient["connect"]),
+      makeGatewayWsClient("c-write", writeSocket, {
+        role: "operator",
+        scopes: ["operator.write"],
+      } as GatewayWsClient["connect"]),
+    ]);
+
+    const { broadcast } = createGatewayBroadcaster({ clients });
+
+    broadcast("chat", { sessionKey: "agent:main:main", message: "large transcript" });
+    broadcast("agent", { type: "status", sessionKey: "agent:main:main" });
+    broadcast("session.message", { sessionKey: "agent:main:main", message: "large payload" });
+    broadcast("plugin.example.state", { data: "not for firmware" });
+    broadcast("talk.realtime.relay", {
+      relaySessionId: "relay-1",
+      type: "idle",
+      reason: "no_response",
+    });
+    broadcast("heartbeat", { ts: 1 });
+
+    expect(voicePeSocket.sent.map((frame) => frame.event)).toEqual([
+      "talk.realtime.relay",
+      "heartbeat",
+    ]);
+    expect(writeSocket.sent.map((frame) => frame.event)).toEqual([
+      "chat",
+      "agent",
+      "session.message",
+      "plugin.example.state",
+      "talk.realtime.relay",
+      "heartbeat",
+    ]);
+  });
+
   it("allows plugin.* broadcast events for operator.write and operator.admin", () => {
     const { pairingSocket, nodeSocket, readSocket, writeSocket, adminSocket, clients } =
       makeScopedBroadcastClients();
