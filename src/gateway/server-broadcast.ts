@@ -60,7 +60,6 @@ const VOICE_PE_ALLOWED_EVENTS = new Set<string>([
   "voicewake.changed",
   "voicewake.routing.changed",
   "heartbeat",
-  "health",
   "tick",
   "shutdown",
   "update.available",

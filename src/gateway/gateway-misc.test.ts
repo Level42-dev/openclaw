@@ -451,7 +451,7 @@ describe("gateway broadcaster", () => {
         role: "operator",
         scopes: ["operator.write"],
         client: { id: "voice-pe", deviceFamily: "voice-pe" },
-      } as GatewayWsClient["connect"]),
+      } as unknown as GatewayWsClient["connect"]),
       makeGatewayWsClient("c-write", writeSocket, {
         role: "operator",
         scopes: ["operator.write"],
@@ -470,6 +470,7 @@ describe("gateway broadcaster", () => {
       reason: "no_response",
     });
     broadcast("heartbeat", { ts: 1 });
+    broadcast("health", { ok: true, snapshot: "not for firmware" });
 
     expect(voicePeSocket.sent.map((frame) => frame.event)).toEqual([
       "talk.realtime.relay",
@@ -482,6 +483,7 @@ describe("gateway broadcaster", () => {
       "plugin.example.state",
       "talk.realtime.relay",
       "heartbeat",
+      "health",
     ]);
   });
 
