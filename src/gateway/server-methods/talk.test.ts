@@ -1128,6 +1128,74 @@ describe("talk.client.toolCall handler", () => {
       message: "unsupported realtime Talk tool: unknown_tool",
     });
   });
+
+  it("honors an explicit gateway relay transport request without attempting browser session setup", async () => {
+    const createBrowserSession = vi.fn(async () => ({
+      provider: "openai",
+      transport: "managed-room",
+      roomUrl: "https://example.invalid/room",
+    }));
+    const createBridge = vi.fn();
+    const provider = {
+      id: "openai",
+      label: "OpenAI Realtime",
+      isConfigured: () => true,
+      createBrowserSession,
+      createBridge,
+    };
+    mocks.getRealtimeVoiceProvider.mockReturnValue(provider);
+    mocks.resolveConfiguredRealtimeVoiceProvider.mockReturnValue({
+      provider,
+      providerConfig: { apiKey: "openai-key" },
+    });
+    mocks.createTalkRealtimeRelaySession.mockReturnValue({
+      provider: "openai",
+      transport: "gateway-relay",
+      relaySessionId: "relay-voice-pe",
+      audio: {
+        inputEncoding: "pcm16",
+        inputSampleRateHz: 24000,
+        outputEncoding: "pcm16",
+        outputSampleRateHz: 24000,
+      },
+    });
+
+    const respond = vi.fn();
+    await talkHandlers["talk.realtime.session"]({
+      req: { type: "req", id: "1", method: "talk.realtime.session" },
+      params: { provider: "openai", transport: "gateway-relay" },
+      client: { connId: "conn-voice-pe" } as never,
+      isWebchatConnect: () => false,
+      respond: respond as never,
+      context: {
+        getRuntimeConfig: () =>
+          ({
+            talk: {
+              provider: "openai",
+              providers: { openai: { apiKey: "openai-key" } },
+            },
+          }) as OpenClawConfig,
+      } as never,
+    });
+
+    expect(createBrowserSession).not.toHaveBeenCalled();
+    expect(mocks.createTalkRealtimeRelaySession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connId: "conn-voice-pe",
+        provider,
+        providerConfig: { apiKey: "openai-key" },
+      }),
+    );
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        provider: "openai",
+        transport: "gateway-relay",
+        relaySessionId: "relay-voice-pe",
+      }),
+      undefined,
+    );
+  });
 });
 
 describe("talk.client.create handler", () => {

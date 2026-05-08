@@ -3213,6 +3213,7 @@ public struct TalkSessionCancelTurnParams: Codable, Sendable {
 public struct TalkSessionCreateParams: Codable, Sendable {
     public let sessionkey: String?
     public let provider: String?
+    public let transport: String?
     public let model: String?
     public let voice: String?
     public let vadthreshold: Double?
@@ -3227,6 +3228,7 @@ public struct TalkSessionCreateParams: Codable, Sendable {
     public init(
         sessionkey: String?,
         provider: String?,
+        transport: String?,
         model: String?,
         voice: String?,
         vadthreshold: Double?,
@@ -3240,6 +3242,7 @@ public struct TalkSessionCreateParams: Codable, Sendable {
     {
         self.sessionkey = sessionkey
         self.provider = provider
+        self.transport = transport
         self.model = model
         self.voice = voice
         self.vadthreshold = vadthreshold
@@ -3255,6 +3258,7 @@ public struct TalkSessionCreateParams: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case sessionkey = "sessionKey"
         case provider
+        case transport
         case model
         case voice
         case vadthreshold = "vadThreshold"
