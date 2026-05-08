@@ -44,12 +44,17 @@ const EVENT_SCOPE_GUARDS: Record<string, string[]> = {
   "sessions.changed": [READ_SCOPE],
   "session.message": [READ_SCOPE],
   "session.tool": [READ_SCOPE],
+  "talk.realtime.relay": [WRITE_SCOPE],
 };
 
 // Events that node-role sessions must receive even when the event's operator
 // scope would otherwise reject non-operator roles. Nodes act on these updates
 // (e.g. reconfiguring wake-word triggers).
-const NODE_ALLOWED_EVENTS = new Set<string>(["voicewake.changed", "voicewake.routing.changed"]);
+const NODE_ALLOWED_EVENTS = new Set<string>([
+  "talk.realtime.relay",
+  "voicewake.changed",
+  "voicewake.routing.changed",
+]);
 
 function serializeFrameField(name: "payload" | "stateVersion", value: unknown): string {
   const fieldJSON = JSON.stringify({ [name]: value });

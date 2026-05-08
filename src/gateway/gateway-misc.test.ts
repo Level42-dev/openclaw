@@ -475,6 +475,11 @@ describe("gateway broadcaster", () => {
 
     broadcast("cron", { jobId: "job-1" });
     broadcast("talk.mode", { enabled: true });
+    broadcast("talk.realtime.relay", {
+      relaySessionId: "relay-1",
+      type: "idle",
+      reason: "no_response",
+    });
     broadcast("voicewake.changed", { triggers: ["hello"] });
     broadcast("voicewake.routing.changed", { config: { routes: [] } });
     broadcast("heartbeat", { ts: 1 });
@@ -494,6 +499,7 @@ describe("gateway broadcaster", () => {
       "update.available",
     ]);
     expect(nodeSocket.sent.map((frame) => frame.event)).toEqual([
+      "talk.realtime.relay",
       "voicewake.changed",
       "voicewake.routing.changed",
       "heartbeat",
@@ -517,6 +523,7 @@ describe("gateway broadcaster", () => {
     expect(writeSocket.sent.map((frame) => frame.event)).toEqual([
       "cron",
       "talk.mode",
+      "talk.realtime.relay",
       "voicewake.changed",
       "voicewake.routing.changed",
       "heartbeat",
@@ -529,6 +536,7 @@ describe("gateway broadcaster", () => {
     expect(adminSocket.sent.map((frame) => frame.event)).toEqual([
       "cron",
       "talk.mode",
+      "talk.realtime.relay",
       "voicewake.changed",
       "voicewake.routing.changed",
       "heartbeat",
