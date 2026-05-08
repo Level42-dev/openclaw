@@ -6,6 +6,7 @@ import type {
   RealtimeVoiceBargeInOptions,
   RealtimeVoiceCloseReason,
   RealtimeVoiceBridgeEvent,
+  RealtimeVoiceFinalizeAudioInputResult,
   RealtimeVoiceProviderConfig,
   RealtimeVoiceRole,
   RealtimeVoiceTool,
@@ -29,6 +30,7 @@ export type RealtimeVoiceBridgeSession = {
   connect(): Promise<void>;
   sendAudio(audio: Buffer): void;
   sendUserMessage(text: string): void;
+  finalizeAudioInput(): Promise<void | RealtimeVoiceFinalizeAudioInputResult>;
   handleBargeIn(options?: RealtimeVoiceBargeInOptions): void;
   setMediaTimestamp(ts: number): void;
   submitToolResult(callId: string, result: unknown, options?: RealtimeVoiceToolResultOptions): void;
@@ -75,6 +77,7 @@ export function createRealtimeVoiceBridgeSession(
     connect: () => requireBridge().connect(),
     sendAudio: (audio) => requireBridge().sendAudio(audio),
     sendUserMessage: (text) => requireBridge().sendUserMessage?.(text),
+    finalizeAudioInput: async () => requireBridge().finalizeAudioInput?.(),
     handleBargeIn: (options) => requireBridge().handleBargeIn?.(options),
     setMediaTimestamp: (ts) => requireBridge().setMediaTimestamp(ts),
     submitToolResult: (callId, result, options) =>

@@ -17,6 +17,7 @@ import type {
   RealtimeVoiceBrowserSession,
   RealtimeVoiceBrowserSessionCreateRequest,
   RealtimeVoiceBridgeCreateRequest,
+  RealtimeVoiceFinalizeAudioInputResult,
   RealtimeVoiceProviderConfig,
   RealtimeVoiceProviderPlugin,
   RealtimeVoiceTool,
@@ -393,6 +394,15 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
       type: "input_audio_buffer.append",
       audio: audio.toString("base64"),
     });
+  }
+
+  finalizeAudioInput(): RealtimeVoiceFinalizeAudioInputResult {
+    if (!this.connected || !this.sessionConfigured || this.ws?.readyState !== WebSocket.OPEN) {
+      return { status: "no_response" };
+    }
+    this.sendEvent({ type: "input_audio_buffer.commit" });
+    this.sendEvent({ type: "response.create" });
+    return { status: "committed" };
   }
 
   setMediaTimestamp(ts: number): void {

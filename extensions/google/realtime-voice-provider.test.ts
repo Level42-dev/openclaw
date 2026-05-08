@@ -535,6 +535,24 @@ describe("buildGoogleRealtimeVoiceProvider", () => {
     expect(session.sendRealtimeInput).toHaveBeenCalledWith({ audioStreamEnd: true });
   });
 
+  it("marks the Google audio stream complete on explicit finalize", async () => {
+    const provider = buildGoogleRealtimeVoiceProvider();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "gemini-key" },
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+    });
+
+    await bridge.connect();
+    lastConnectParams().callbacks.onopen();
+    lastConnectParams().callbacks.onmessage({ setupComplete: { sessionId: "session-1" } });
+
+    const result = bridge.finalizeAudioInput?.();
+
+    expect(result).toEqual({ status: "committed" });
+    expect(session.sendRealtimeInput).toHaveBeenCalledWith({ audioStreamEnd: true });
+  });
+
   it("fuses telephony mu-law conversion into the Gemini 16 kHz PCM input frame", async () => {
     const provider = buildGoogleRealtimeVoiceProvider();
     const bridge = provider.createBridge({
