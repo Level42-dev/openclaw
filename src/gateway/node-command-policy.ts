@@ -21,6 +21,7 @@ const ANDROID_NOTIFICATION_COMMANDS = [...NOTIFICATION_COMMANDS, "notifications.
 
 const DEVICE_COMMANDS = ["device.info", "device.status"];
 const ANDROID_DEVICE_COMMANDS = [...DEVICE_COMMANDS, "device.permissions", "device.health"];
+const EMBEDDED_COMMANDS = ["device.status"];
 
 const CONTACTS_COMMANDS = ["contacts.search"];
 const CONTACTS_DANGEROUS_COMMANDS = ["contacts.add"];
@@ -111,11 +112,12 @@ const PLATFORM_DEFAULTS: Record<string, string[]> = {
     ...SYSTEM_COMMANDS,
     ...SCREEN_COMMANDS,
   ],
+  embedded: [...EMBEDDED_COMMANDS],
   // Fail-safe: unknown metadata should not receive host exec defaults.
   unknown: [...UNKNOWN_PLATFORM_COMMANDS],
 };
 
-type PlatformId = "ios" | "android" | "macos" | "windows" | "linux" | "unknown";
+type PlatformId = "ios" | "android" | "macos" | "windows" | "linux" | "embedded" | "unknown";
 
 const PLATFORM_PREFIX_RULES: ReadonlyArray<{
   id: Exclude<PlatformId, "unknown">;
@@ -126,6 +128,7 @@ const PLATFORM_PREFIX_RULES: ReadonlyArray<{
   { id: "macos", prefixes: ["mac", "darwin"] },
   { id: "windows", prefixes: ["win"] },
   { id: "linux", prefixes: ["linux"] },
+  { id: "embedded", prefixes: ["esp32-s3"] },
 ] as const;
 
 const DEVICE_FAMILY_TOKEN_RULES: ReadonlyArray<{
@@ -137,6 +140,7 @@ const DEVICE_FAMILY_TOKEN_RULES: ReadonlyArray<{
   { id: "macos", tokens: ["mac"] },
   { id: "windows", tokens: ["windows"] },
   { id: "linux", tokens: ["linux"] },
+  { id: "embedded", tokens: ["voice-pe", "esp32-s3"] },
 ] as const;
 
 function resolvePlatformIdByPrefix(value: string): Exclude<PlatformId, "unknown"> | undefined {

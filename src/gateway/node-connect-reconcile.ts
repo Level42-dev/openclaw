@@ -59,12 +59,21 @@ export async function reconcileNodePairingOnConnect(params: {
   requestPairing: (input: NodePairingRequestInput) => Promise<PendingNodePairingResult>;
 }): Promise<NodeConnectPairingReconcileResult> {
   const nodeId = params.connectParams.device?.id ?? params.connectParams.client.id;
-  const allowlist = resolveNodeCommandAllowlist(params.cfg, {
+  const nodePolicyContext = {
     platform: params.connectParams.client.platform,
     deviceFamily: params.connectParams.client.deviceFamily,
     caps: params.connectParams.caps,
     commands: params.connectParams.commands,
-  });
+  };
+  const allowlist = resolveNodeCommandAllowlist(params.cfg, nodePolicyContext);
+  const defaultAllowlist = resolveNodeCommandAllowlist(
+    {},
+    {
+      platform: nodePolicyContext.platform,
+      deviceFamily: nodePolicyContext.deviceFamily,
+      caps: nodePolicyContext.caps,
+    },
+  );
   const declared = normalizeDeclaredNodeCommands({
     declaredCommands: Array.isArray(params.connectParams.commands)
       ? params.connectParams.commands
@@ -92,7 +101,14 @@ export async function reconcileNodePairingOnConnect(params: {
     pairedCommands: params.pairedNode.commands,
     allowlist,
   });
-  const hasCommandUpgrade = declared.some((command) => !approvedCommands.includes(command));
+  const safeDefaultCommands = declared.filter((command) => defaultAllowlist.has(command));
+  const effectiveApprovedCommands = [
+    ...approvedCommands,
+    ...safeDefaultCommands.filter((command) => !approvedCommands.includes(command)),
+  ];
+  const hasCommandUpgrade = declared.some(
+    (command) => !effectiveApprovedCommands.includes(command),
+  );
 
   if (hasCommandUpgrade) {
     const pendingPairing = await params.requestPairing(
@@ -105,7 +121,7 @@ export async function reconcileNodePairingOnConnect(params: {
     );
     return {
       nodeId,
-      effectiveCommands: approvedCommands,
+      effectiveCommands: effectiveApprovedCommands,
       pendingPairing,
     };
   }
