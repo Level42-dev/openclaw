@@ -2644,6 +2644,20 @@ public struct TalkRealtimeRelayStopParams: Codable, Sendable {
     }
 }
 
+public struct TalkRealtimeRelayCommitParams: Codable, Sendable {
+    public let relaysessionid: String
+
+    public init(
+        relaysessionid: String)
+    {
+        self.relaysessionid = relaysessionid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case relaysessionid = "relaySessionId"
+    }
+}
+
 public struct TalkRealtimeRelayToolResultParams: Codable, Sendable {
     public let relaysessionid: String
     public let callid: String
