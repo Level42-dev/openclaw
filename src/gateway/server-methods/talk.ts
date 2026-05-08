@@ -510,6 +510,7 @@ export const talkHandlers: GatewayRequestHandlers = {
     }
     const typedParams = params as {
       provider?: string;
+      transport?: "gateway-relay";
       model?: string;
       voice?: string;
     };
@@ -523,7 +524,8 @@ export const talkHandlers: GatewayRequestHandlers = {
         cfgForResolve: runtimeConfig,
         noRegisteredProviderMessage: "No realtime voice provider registered",
       });
-      if (resolution.provider.createBrowserSession) {
+      const requestedGatewayRelay = typedParams.transport === "gateway-relay";
+      if (!requestedGatewayRelay && resolution.provider.createBrowserSession) {
         const session = await resolution.provider.createBrowserSession({
           providerConfig: resolution.providerConfig,
           instructions: buildRealtimeInstructions(),

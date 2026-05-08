@@ -40,6 +40,7 @@ export const TalkRealtimeSessionParamsSchema = Type.Object(
   {
     sessionKey: Type.Optional(Type.String()),
     provider: Type.Optional(Type.String()),
+    transport: Type.Optional(Type.Literal("gateway-relay")),
     model: Type.Optional(Type.String()),
     voice: Type.Optional(Type.String()),
   },

@@ -2567,17 +2567,20 @@ public struct TalkConfigResult: Codable, Sendable {
 public struct TalkRealtimeSessionParams: Codable, Sendable {
     public let sessionkey: String?
     public let provider: String?
+    public let transport: String?
     public let model: String?
     public let voice: String?
 
     public init(
         sessionkey: String?,
         provider: String?,
+        transport: String?,
         model: String?,
         voice: String?)
     {
         self.sessionkey = sessionkey
         self.provider = provider
+        self.transport = transport
         self.model = model
         self.voice = voice
     }
@@ -2585,6 +2588,7 @@ public struct TalkRealtimeSessionParams: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case sessionkey = "sessionKey"
         case provider
+        case transport
         case model
         case voice
     }

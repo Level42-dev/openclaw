@@ -124,15 +124,29 @@ describe("validateTalkConfigResult", () => {
 });
 
 describe("validateTalkRealtimeSessionParams", () => {
-  it("accepts provider, model, and voice overrides", () => {
+  it("accepts provider, model, voice, and gateway relay transport overrides", () => {
     expect(
       validateTalkRealtimeSessionParams({
         sessionKey: "agent:main:main",
         provider: "openai",
+        transport: "gateway-relay",
         model: "gpt-realtime-1.5",
         voice: "alloy",
       }),
     ).toBe(true);
+  });
+
+  it("rejects unknown realtime session transports", () => {
+    expect(
+      validateTalkRealtimeSessionParams({
+        sessionKey: "agent:main:main",
+        provider: "openai",
+        transport: "webrtc-sdp",
+      }),
+    ).toBe(false);
+    expect(formatValidationErrors(validateTalkRealtimeSessionParams.errors)).toContain(
+      "at /transport: must be equal to constant",
+    );
   });
 
   it("rejects request-time instruction overrides", () => {
@@ -151,9 +165,9 @@ describe("validateTalkRealtimeSessionParams", () => {
 describe("validateTalkRealtimeRelayCommitParams", () => {
   it("accepts only a relay session id", () => {
     expect(validateTalkRealtimeRelayCommitParams({ relaySessionId: "relay-1" })).toBe(true);
-    expect(
-      validateTalkRealtimeRelayCommitParams({ relaySessionId: "relay-1", close: true }),
-    ).toBe(false);
+    expect(validateTalkRealtimeRelayCommitParams({ relaySessionId: "relay-1", close: true })).toBe(
+      false,
+    );
   });
 });
 
