@@ -7,6 +7,7 @@ import {
   validateNodeEventResult,
   validateNodePresenceAlivePayload,
   validateTalkConfigResult,
+  validateTalkRealtimeRelayCommitParams,
   validateTalkRealtimeSessionParams,
   validateWakeParams,
 } from "./index.js";
@@ -144,6 +145,15 @@ describe("validateTalkRealtimeSessionParams", () => {
     expect(formatValidationErrors(validateTalkRealtimeSessionParams.errors)).toContain(
       "unexpected property 'instructions'",
     );
+  });
+});
+
+describe("validateTalkRealtimeRelayCommitParams", () => {
+  it("accepts only a relay session id", () => {
+    expect(validateTalkRealtimeRelayCommitParams({ relaySessionId: "relay-1" })).toBe(true);
+    expect(
+      validateTalkRealtimeRelayCommitParams({ relaySessionId: "relay-1", close: true }),
+    ).toBe(false);
   });
 });
 

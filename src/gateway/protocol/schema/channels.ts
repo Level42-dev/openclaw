@@ -70,6 +70,13 @@ export const TalkRealtimeRelayStopParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const TalkRealtimeRelayCommitParamsSchema = Type.Object(
+  {
+    relaySessionId: NonEmptyString,
+  },
+  { additionalProperties: false },
+);
+
 export const TalkRealtimeRelayToolResultParamsSchema = Type.Object(
   {
     relaySessionId: NonEmptyString,

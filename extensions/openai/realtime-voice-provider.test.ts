@@ -444,6 +444,36 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     });
   });
 
+  it("commits buffered audio and explicitly creates a response on finalize", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+
+    bridge.sendAudio(Buffer.from("audio-in"));
+    const result = bridge.finalizeAudioInput?.();
+
+    expect(result).toEqual({ status: "committed" });
+    expect(
+      parseSent(socket)
+        .slice(-3)
+        .map((event) => event.type),
+    ).toEqual(["input_audio_buffer.append", "input_audio_buffer.commit", "response.create"]);
+    expect(parseSent(socket).at(-3)?.audio).toBe(Buffer.from("audio-in").toString("base64"));
+  });
+
   it("keeps assistant playback active on server VAD when automatic audio responses are disabled", async () => {
     const provider = buildOpenAIRealtimeVoiceProvider();
     const onAudio = vi.fn();
@@ -641,6 +671,40 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
       "hello from current realtime events",
       true,
     );
+  });
+
+  it("finalizes buffered input audio by committing and requesting a response", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const onEvent = vi.fn();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+      onEvent,
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+
+    const result = bridge.finalizeAudioInput?.();
+
+    expect(result).toEqual({ status: "committed" });
+    expect(parseSent(socket).slice(-2)).toEqual([
+      { type: "input_audio_buffer.commit" },
+      { type: "response.create" },
+    ]);
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "client",
+      type: "input_audio_buffer.commit",
+    });
+    expect(onEvent).toHaveBeenCalledWith({ direction: "client", type: "response.create" });
   });
 
   it("creates an explicit user item and response for manual speech", async () => {

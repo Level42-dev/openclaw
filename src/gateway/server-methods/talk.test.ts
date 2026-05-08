@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getRealtimeVoiceProvider: vi.fn(),
   resolveConfiguredRealtimeVoiceProvider: vi.fn(),
   createTalkRealtimeRelaySession: vi.fn(),
+  finalizeTalkRealtimeRelayTurn: vi.fn(),
 }));
 
 vi.mock("../../config/config.js", () => ({
@@ -40,6 +41,7 @@ vi.mock("../talk-realtime-relay.js", async (importOriginal) => {
   return {
     ...actual,
     createTalkRealtimeRelaySession: mocks.createTalkRealtimeRelaySession,
+    finalizeTalkRealtimeRelayTurn: mocks.finalizeTalkRealtimeRelayTurn,
   };
 });
 
@@ -308,5 +310,56 @@ describe("talk.realtime.session handler", () => {
       }),
       undefined,
     );
+  });
+});
+
+describe("talk.realtime.relayCommit handler", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("finalizes the relay turn without stopping the relay session", async () => {
+    const respond = vi.fn();
+
+    await talkHandlers["talk.realtime.relayCommit"]({
+      req: { type: "req", id: "1", method: "talk.realtime.relayCommit" },
+      params: { relaySessionId: "relay-1" },
+      client: { connId: "conn-1" } as never,
+      isWebchatConnect: () => false,
+      respond: respond as never,
+      context: {} as never,
+    });
+
+    expect(mocks.finalizeTalkRealtimeRelayTurn).toHaveBeenCalledWith({
+      relaySessionId: "relay-1",
+      connId: "conn-1",
+    });
+    expect(respond).toHaveBeenCalledWith(true, { ok: true }, undefined);
+  });
+
+  it("sanitizes relay commit finalization errors before responding", async () => {
+    mocks.finalizeTalkRealtimeRelayTurn.mockRejectedValueOnce(
+      new Error("401 invalid API key sk-live-secret"),
+    );
+    const respond = vi.fn();
+
+    await talkHandlers["talk.realtime.relayCommit"]({
+      req: { type: "req", id: "1", method: "talk.realtime.relayCommit" },
+      params: { relaySessionId: "relay-1" },
+      client: { connId: "conn-1" } as never,
+      isWebchatConnect: () => false,
+      respond: respond as never,
+      context: {} as never,
+    });
+
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        code: "UNAVAILABLE",
+        message: "realtime provider authentication error",
+      }),
+    );
+    expect(JSON.stringify(respond.mock.calls)).not.toContain("sk-live-secret");
   });
 });

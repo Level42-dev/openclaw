@@ -139,6 +139,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "talk.realtime.relayAudio",
     "talk.realtime.relayMark",
     "talk.realtime.relayStop",
+    "talk.realtime.relayCommit",
     "talk.realtime.relayToolResult",
     "talk.speak",
     "tts.enable",

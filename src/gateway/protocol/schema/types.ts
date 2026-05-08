@@ -94,6 +94,7 @@ export type TalkRealtimeSessionResult = SchemaType<"TalkRealtimeSessionResult">;
 export type TalkRealtimeRelayAudioParams = SchemaType<"TalkRealtimeRelayAudioParams">;
 export type TalkRealtimeRelayMarkParams = SchemaType<"TalkRealtimeRelayMarkParams">;
 export type TalkRealtimeRelayStopParams = SchemaType<"TalkRealtimeRelayStopParams">;
+export type TalkRealtimeRelayCommitParams = SchemaType<"TalkRealtimeRelayCommitParams">;
 export type TalkRealtimeRelayToolResultParams = SchemaType<"TalkRealtimeRelayToolResultParams">;
 export type TalkRealtimeRelayOkResult = SchemaType<"TalkRealtimeRelayOkResult">;
 export type TalkSpeakParams = SchemaType<"TalkSpeakParams">;
