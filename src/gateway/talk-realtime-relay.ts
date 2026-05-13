@@ -68,6 +68,8 @@ type RelaySession = {
   expiresAtMs: number;
   acceptedAudioBytes: number;
   outputEventCount: number;
+  commitNoResponseUntilMs?: number;
+  commitOutputEventCount?: number;
   cleanupTimer: ReturnType<typeof setTimeout>;
 };
 
@@ -135,6 +137,13 @@ export function sanitizedRelayErrorMessage(category: RealtimeRelayErrorCategory)
     case "unknown":
       return "realtime provider error";
   }
+}
+
+function isCommitNoResponseError(error: unknown): boolean {
+  const message = formatError(error).toLowerCase();
+  return /\b(no[_ -]?speech|speech not detected|no input speech|empty audio|audio buffer is empty|input_audio_buffer.*empty|input audio buffer.*empty|no audio received|silence detected)\b/.test(
+    message,
+  );
 }
 
 function emitHardRelayError(
@@ -217,8 +226,30 @@ function scheduleCommitNoOutputFallback(
       type: "idle",
       reason: "no_response",
     });
+    active.commitNoResponseUntilMs = undefined;
+    active.commitOutputEventCount = undefined;
   }, RELAY_COMMIT_NO_OUTPUT_TIMEOUT_MS);
   timer.unref?.();
+}
+
+function shouldTreatCommitErrorAsNoResponse(session: RelaySession, error: unknown): boolean {
+  return (
+    session.commitNoResponseUntilMs !== undefined &&
+    Date.now() <= session.commitNoResponseUntilMs &&
+    session.outputEventCount === session.commitOutputEventCount &&
+    isCommitNoResponseError(error)
+  );
+}
+
+function emitCommitNoResponse(session: RelaySession): void {
+  session.acceptedAudioBytes = 0;
+  session.commitNoResponseUntilMs = undefined;
+  session.commitOutputEventCount = undefined;
+  broadcastToOwner(session.context, session.connId, {
+    relaySessionId: session.id,
+    type: "idle",
+    reason: "no_response",
+  });
 }
 
 function pruneExpiredRelaySessions(nowMs = Date.now()): void {
@@ -312,8 +343,12 @@ export function createTalkRealtimeRelaySession(
     onError: (error) => {
       const category = classifyRealtimeRelayError(error);
       log.warn(`relay error session=${relaySessionId.slice(0, 8)} category=${category}`);
-      emitHardRelayError(emit, relaySessionId, error);
       const active = relaySessions.get(relaySessionId);
+      if (active && shouldTreatCommitErrorAsNoResponse(active, error)) {
+        emitCommitNoResponse(active);
+        return;
+      }
+      emitHardRelayError(emit, relaySessionId, error);
       if (active) {
         closeRelaySession(active, "error");
       }
@@ -453,9 +488,17 @@ export async function finalizeTalkRealtimeRelayTurn(params: {
   }
   let result: Awaited<ReturnType<RealtimeVoiceBridgeSession["finalizeAudioInput"]>>;
   const outputEventCountAtCommit = session.outputEventCount;
+  session.commitNoResponseUntilMs = Date.now() + RELAY_COMMIT_NO_OUTPUT_TIMEOUT_MS;
+  session.commitOutputEventCount = outputEventCountAtCommit;
   try {
     result = await session.bridge.finalizeAudioInput();
   } catch (error) {
+    if (shouldTreatCommitErrorAsNoResponse(session, error)) {
+      emitCommitNoResponse(session);
+      return;
+    }
+    session.commitNoResponseUntilMs = undefined;
+    session.commitOutputEventCount = undefined;
     const category = classifyRealtimeRelayError(error);
     emitRelayError(
       (event) => broadcastToOwner(session.context, session.connId, event),
@@ -466,6 +509,8 @@ export async function finalizeTalkRealtimeRelayTurn(params: {
   }
   const status = result && typeof result === "object" ? result.status : undefined;
   if (status === "idle" || status === "no_response") {
+    session.commitNoResponseUntilMs = undefined;
+    session.commitOutputEventCount = undefined;
     broadcastToOwner(session.context, session.connId, {
       relaySessionId: session.id,
       type: "idle",

@@ -261,6 +261,184 @@ describe("talk realtime gateway relay", () => {
     expect(JSON.stringify(events)).not.toContain("sk-live-secret");
   });
 
+  it("maps provider no-speech commit failures to sanitized no-response idle", async () => {
+    const bridge = {
+      connect: vi.fn(async () => undefined),
+      sendAudio: vi.fn(),
+      setMediaTimestamp: vi.fn(),
+      finalizeAudioInput: vi.fn(async () => {
+        throw new Error("input_audio_buffer.commit failed: no speech detected");
+      }),
+      submitToolResult: vi.fn(),
+      acknowledgeMark: vi.fn(),
+      close: vi.fn(),
+      isConnected: vi.fn(() => true),
+    };
+    const provider: RealtimeVoiceProviderPlugin = {
+      id: "relay-test",
+      label: "Relay Test",
+      isConfigured: () => true,
+      createBridge: () => bridge,
+    };
+    const events: Array<{ event: string; payload: unknown; connIds: string[] }> = [];
+    const context = {
+      broadcastToConnIds: (event: string, payload: unknown, connIds: ReadonlySet<string>) => {
+        events.push({ event, payload, connIds: [...connIds] });
+      },
+    } as never;
+    const session = createTalkRealtimeRelaySession({
+      context,
+      connId: "conn-1",
+      provider,
+      providerConfig: {},
+      instructions: "brief",
+      tools: [],
+    });
+    sendTalkRealtimeRelayAudio({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+      audioBase64: Buffer.from("audio-in").toString("base64"),
+    });
+
+    await expect(
+      finalizeTalkRealtimeRelayTurn({ relaySessionId: session.relaySessionId, connId: "conn-1" }),
+    ).resolves.toBeUndefined();
+
+    expect(events).toContainEqual({
+      event: "talk.realtime.relay",
+      connIds: ["conn-1"],
+      payload: { relaySessionId: session.relaySessionId, type: "idle", reason: "no_response" },
+    });
+    expect(bridge.close).not.toHaveBeenCalled();
+    expect(JSON.stringify(events)).not.toContain("no speech detected");
+  });
+
+  it("maps async provider no-speech errors after commit to sanitized no-response idle", async () => {
+    let bridgeRequest: RealtimeVoiceBridgeCreateRequest | undefined;
+    const bridge = {
+      connect: vi.fn(async () => undefined),
+      sendAudio: vi.fn(),
+      setMediaTimestamp: vi.fn(),
+      finalizeAudioInput: vi.fn(async () => ({ status: "committed" as const })),
+      submitToolResult: vi.fn(),
+      acknowledgeMark: vi.fn(),
+      close: vi.fn(),
+      isConnected: vi.fn(() => true),
+    };
+    const provider: RealtimeVoiceProviderPlugin = {
+      id: "relay-test",
+      label: "Relay Test",
+      isConfigured: () => true,
+      createBridge: (req) => {
+        bridgeRequest = req;
+        return bridge;
+      },
+    };
+    const events: Array<{ event: string; payload: unknown; connIds: string[] }> = [];
+    const context = {
+      broadcastToConnIds: (event: string, payload: unknown, connIds: ReadonlySet<string>) => {
+        events.push({ event, payload, connIds: [...connIds] });
+      },
+    } as never;
+    const session = createTalkRealtimeRelaySession({
+      context,
+      connId: "conn-1",
+      provider,
+      providerConfig: {},
+      instructions: "brief",
+      tools: [],
+    });
+    sendTalkRealtimeRelayAudio({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+      audioBase64: Buffer.from("audio-in").toString("base64"),
+    });
+
+    await finalizeTalkRealtimeRelayTurn({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+    });
+    bridgeRequest?.onError?.(new Error("input audio buffer is empty"));
+
+    expect(events).toContainEqual({
+      event: "talk.realtime.relay",
+      connIds: ["conn-1"],
+      payload: { relaySessionId: session.relaySessionId, type: "idle", reason: "no_response" },
+    });
+    expect(bridge.close).not.toHaveBeenCalled();
+  });
+
+  it("keeps unrelated async provider errors on the hard relay error path", async () => {
+    let bridgeRequest: RealtimeVoiceBridgeCreateRequest | undefined;
+    const bridge = {
+      connect: vi.fn(async () => undefined),
+      sendAudio: vi.fn(),
+      setMediaTimestamp: vi.fn(),
+      finalizeAudioInput: vi.fn(async () => ({ status: "committed" as const })),
+      submitToolResult: vi.fn(),
+      acknowledgeMark: vi.fn(),
+      close: vi.fn(),
+      isConnected: vi.fn(() => true),
+    };
+    const provider: RealtimeVoiceProviderPlugin = {
+      id: "relay-test",
+      label: "Relay Test",
+      isConfigured: () => true,
+      createBridge: (req) => {
+        bridgeRequest = req;
+        return bridge;
+      },
+    };
+    const events: Array<{ event: string; payload: unknown; connIds: string[] }> = [];
+    const context = {
+      broadcastToConnIds: (event: string, payload: unknown, connIds: ReadonlySet<string>) => {
+        events.push({ event, payload, connIds: [...connIds] });
+      },
+    } as never;
+    const session = createTalkRealtimeRelaySession({
+      context,
+      connId: "conn-1",
+      provider,
+      providerConfig: {},
+      instructions: "brief",
+      tools: [],
+    });
+    sendTalkRealtimeRelayAudio({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+      audioBase64: Buffer.from("audio-in").toString("base64"),
+    });
+
+    await finalizeTalkRealtimeRelayTurn({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+    });
+    bridgeRequest?.onError?.(new Error("unexpected provider protocol failure"));
+
+    expect(events).toContainEqual({
+      event: "talk.realtime.relay",
+      connIds: ["conn-1"],
+      payload: {
+        relaySessionId: session.relaySessionId,
+        type: "error",
+        category: "unknown",
+        hard: true,
+        message: "realtime provider error",
+      },
+    });
+    expect(events).toContainEqual({
+      event: "talk.realtime.relay",
+      connIds: ["conn-1"],
+      payload: {
+        relaySessionId: session.relaySessionId,
+        type: "paused",
+        category: "unknown",
+        reason: "provider_hard_error",
+      },
+    });
+    expect(bridge.close).toHaveBeenCalled();
+  });
+
   it("emits no-response idle when committed input produces no provider output", async () => {
     vi.useFakeTimers();
     const bridge = {
