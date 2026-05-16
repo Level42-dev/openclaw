@@ -8,7 +8,9 @@ read_when:
   - You are changing ClawSweeper dispatch or GitHub activity forwarding
 ---
 
-OpenClaw CI runs on every push to `main` and every pull request. The `preflight` job classifies the diff and turns expensive lanes off when only unrelated areas changed. Manual `workflow_dispatch` runs intentionally bypass smart scoping and fan out the full graph for release candidates and broad validation. Android lanes stay opt-in through `include_android`. Release-only plugin coverage lives in the separate [`Plugin Prerelease`](#plugin-prerelease) workflow and only runs from [`Full Release Validation`](#full-release-validation) or an explicit manual dispatch.
+OpenClaw CI runs on every push to `main`, every push to the long-lived `clawtalk/base-v2026.5.7` integration branch, and every pull request. The `preflight` job classifies the diff and turns expensive lanes off when only unrelated areas changed. Manual `workflow_dispatch` runs intentionally bypass smart scoping and fan out the full graph for release candidates and broad validation. Android lanes stay opt-in through `include_android`. Release-only plugin coverage lives in the separate [`Plugin Prerelease`](#plugin-prerelease) workflow and only runs from [`Full Release Validation`](#full-release-validation) or an explicit manual dispatch.
+
+For ClawTalk base branch refreshes, CI must be attached to the candidate branch commit before installing or promoting it. If a refresh does not naturally create a push check on `clawtalk/base-v2026.5.7`, dispatch `CI` manually with `target_ref` set to the exact candidate SHA. When the update affects installation, packaging, or runtime startup behavior, also dispatch `Install Smoke` on the same branch before relying on local gateway health as release evidence.
 
 ## Pipeline overview
 

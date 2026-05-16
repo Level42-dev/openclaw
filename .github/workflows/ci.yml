@@ -14,7 +14,9 @@ on:
         default: false
         type: boolean
   push:
-    branches: [main]
+    branches:
+      - main
+      - clawtalk/base-v2026.5.7
     paths-ignore:
       - "**/*.md"
       - "docs/**"
