@@ -161,7 +161,6 @@ export const TalkClientCreateParamsSchema = Type.Object(
   {
     sessionKey: Type.Optional(Type.String()),
     provider: Type.Optional(Type.String()),
-    transport: Type.Optional(Type.Literal("gateway-relay")),
     model: Type.Optional(Type.String()),
     voice: Type.Optional(Type.String()),
     vadThreshold: Type.Optional(Type.Number()),

@@ -200,7 +200,7 @@ function listDefaultPluginNodeCommands(platformId: PlatformId): string[] {
       return [];
     }
     const defaults = entry.policy.defaultPlatforms ?? [];
-    return defaults.includes(platformId) ? entry.policy.commands : [];
+    return platformId !== "embedded" && defaults.includes(platformId) ? entry.policy.commands : [];
   });
   return [...new Set(commands.map((command) => command.trim()).filter(Boolean))];
 }
