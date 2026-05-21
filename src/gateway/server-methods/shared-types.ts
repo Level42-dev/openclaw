@@ -31,6 +31,7 @@ export type GatewayClient = {
   internal?: {
     allowModelOverride?: boolean;
     approvalRuntime?: boolean;
+    nodeRoleAuthorized?: boolean;
     pluginRuntimeOwnerId?: string;
   };
 };

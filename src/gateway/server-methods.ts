@@ -2,7 +2,11 @@ import { getPluginRegistryState } from "../plugins/runtime-state.js";
 import { withPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
 import { formatControlPlaneActor, resolveControlPlaneActor } from "./control-plane-audit.js";
 import { consumeControlPlaneWriteBudget } from "./control-plane-rate-limit.js";
-import { ADMIN_SCOPE, authorizeOperatorScopesForMethod } from "./method-scopes.js";
+import {
+  ADMIN_SCOPE,
+  authorizeOperatorScopesForMethod,
+  isNodeRoleMethod,
+} from "./method-scopes.js";
 import {
   createCoreGatewayMethodDescriptors,
   createGatewayMethodDescriptorsFromHandlers,
@@ -16,7 +20,7 @@ import {
   gatewayStartupUnavailableDetails,
   GATEWAY_STARTUP_RETRY_AFTER_MS,
 } from "./protocol/startup-unavailable.js";
-import { isRoleAuthorizedForMethod, parseGatewayRole } from "./role-policy.js";
+import { isClientAuthorizedForMethod, parseGatewayRole } from "./role-policy.js";
 import { agentHandlers } from "./server-methods/agent.js";
 import { agentsHandlers } from "./server-methods/agents.js";
 import { artifactsHandlers } from "./server-methods/artifacts.js";
@@ -80,10 +84,13 @@ function authorizeGatewayMethod(
     return errorShape(ErrorCodes.INVALID_REQUEST, `unauthorized role: ${roleRaw}`);
   }
   const scopes = client.connect.scopes ?? [];
-  if (!isRoleAuthorizedForMethod(role, method)) {
+  if (!isClientAuthorizedForMethod(client, method)) {
     return errorShape(ErrorCodes.INVALID_REQUEST, `unauthorized role: ${role}`);
   }
-  if (role === "node") {
+  if (
+    role === "node" ||
+    (client.internal?.nodeRoleAuthorized === true && isNodeRoleMethod(method))
+  ) {
     return null;
   }
   if (scopes.includes(ADMIN_SCOPE)) {

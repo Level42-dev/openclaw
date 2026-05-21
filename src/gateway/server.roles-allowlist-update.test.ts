@@ -5,8 +5,15 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
 import type { HealthSummary } from "../commands/health.types.js";
 import type { DeviceIdentity } from "../infra/device-identity.js";
-import { loadOrCreateDeviceIdentity } from "../infra/device-identity.js";
-import { approveDevicePairing, listDevicePairing } from "../infra/device-pairing.js";
+import {
+  loadOrCreateDeviceIdentity,
+  publicKeyRawBase64UrlFromPem,
+} from "../infra/device-identity.js";
+import {
+  approveDevicePairing,
+  listDevicePairing,
+  requestDevicePairing,
+} from "../infra/device-pairing.js";
 import { approveNodePairing, requestNodePairing } from "../infra/node-pairing.js";
 import { resolveRestartSentinelPath } from "../infra/restart-sentinel.js";
 import { getActiveRuntimePluginRegistry } from "../plugins/active-runtime-registry.js";
@@ -123,6 +130,28 @@ const connectNodeClient = async (params: {
     onEvent: params.onEvent,
     timeoutMessage: "timeout waiting for node to connect",
   });
+};
+
+const pairMixedRoleDevice = async (params: {
+  deviceIdentity: DeviceIdentity;
+  scopes: string[];
+  clientName?: GatewayClientName;
+}) => {
+  const request = await requestDevicePairing({
+    deviceId: params.deviceIdentity.deviceId,
+    publicKey: publicKeyRawBase64UrlFromPem(params.deviceIdentity.publicKeyPem),
+    role: "operator",
+    roles: ["operator", "node"],
+    scopes: params.scopes,
+    clientId: params.clientName ?? GATEWAY_CLIENT_NAMES.NODE_HOST,
+    clientMode: GATEWAY_CLIENT_MODES.NODE,
+  });
+  const approved = await approveDevicePairing(request.request.requestId, {
+    callerScopes: params.scopes,
+  });
+  if (approved?.status !== "approved") {
+    throw new Error("expected mixed-role device approval");
+  }
 };
 
 function requireNodeId(nodeId: string | undefined, label: string): string {
@@ -579,6 +608,95 @@ describe("gateway node command allowlist", () => {
       });
       const invokeRes = await invokeResP;
       expect(invokeRes.ok).toBe(true);
+    } finally {
+      await nodeClient?.stopAndWait();
+    }
+  });
+
+  test("registers mixed-role operator node-mode clients as invokable nodes", async () => {
+    const displayName = "operator-node-mode";
+    const deviceIdentity = loadOrCreateDeviceIdentity(
+      path.join(os.tmpdir(), `openclaw-operator-node-mode-${Date.now()}-${Math.random()}.json`),
+    );
+    const nodeId = deviceIdentity.deviceId;
+    let nodeClient: GatewayClient | undefined;
+    let resolveInvoke: ((payload: { id?: string; nodeId?: string }) => void) | null = null;
+    const waitForInvoke = () =>
+      new Promise<{ id?: string; nodeId?: string }>((resolve) => {
+        resolveInvoke = resolve;
+      });
+
+    try {
+      await pairMixedRoleDevice({
+        deviceIdentity,
+        scopes: ["operator.write"],
+      });
+      const nodePairing = await requestNodePairing({
+        nodeId,
+        displayName,
+        platform: "linux",
+        commands: ["canvas.snapshot"],
+      });
+      await approveNodePairing(nodePairing.request.requestId, {
+        callerScopes: ["operator.admin", "operator.write"],
+      });
+
+      const token = process.env.OPENCLAW_GATEWAY_TOKEN;
+      if (!token) {
+        throw new Error("OPENCLAW_GATEWAY_TOKEN is required for operator node-mode test clients");
+      }
+      nodeClient = await connectGatewayClient({
+        url: `ws://127.0.0.1:${port}`,
+        token,
+        role: "operator",
+        scopes: ["operator.write"],
+        clientName: GATEWAY_CLIENT_NAMES.NODE_HOST,
+        clientVersion: "1.0.0",
+        clientDisplayName: displayName,
+        platform: "linux",
+        mode: GATEWAY_CLIENT_MODES.NODE,
+        commands: ["canvas.snapshot"],
+        deviceIdentity,
+        onEvent: (evt) => {
+          if (evt.event === "node.invoke.request") {
+            resolveInvoke?.(evt.payload as { id?: string; nodeId?: string });
+          }
+        },
+      });
+
+      await expect
+        .poll(async () => {
+          const node = await findConnectedNodeByDisplayName(displayName);
+          return {
+            connected: node?.connected,
+            commands: node?.commands ?? [],
+          };
+        }, FAST_WAIT_OPTS)
+        .toEqual({
+          connected: true,
+          commands: ["canvas.snapshot"],
+        });
+
+      const invokeResP = rpcReq(ws, "node.invoke", {
+        nodeId,
+        command: "canvas.snapshot",
+        params: { format: "png" },
+        idempotencyKey: "operator-node-mode-status",
+      });
+      const payload = await waitForInvoke();
+      await nodeClient.request("node.invoke.result", {
+        id: payload.id ?? "",
+        nodeId: payload.nodeId ?? nodeId,
+        ok: true,
+        payloadJSON: JSON.stringify({ ready: true }),
+      });
+      const invokeRes = await invokeResP;
+      expect(invokeRes.ok).toBe(true);
+      expect(invokeRes.payload).toMatchObject({
+        nodeId,
+        command: "canvas.snapshot",
+        payload: { ready: true },
+      });
     } finally {
       await nodeClient?.stopAndWait();
     }
