@@ -400,7 +400,7 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
       const context = buildRequestContext();
       context.unsubscribeAllSessionEvents(connId);
       let currentDisconnectedNodeId: string | null = null;
-      if (client?.connect?.role === "node") {
+      if (client?.connect?.role === "node" || client?.internal?.nodeRoleAuthorized === true) {
         currentDisconnectedNodeId = context.nodeRegistry.unregister(connId);
       }
       if (

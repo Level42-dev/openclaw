@@ -13,5 +13,6 @@ export type GatewayWsClient = PluginNodeCapabilityClient & {
   clientIp?: string;
   internal?: {
     approvalRuntime?: boolean;
+    nodeRoleAuthorized?: boolean;
   };
 };

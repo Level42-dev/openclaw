@@ -623,6 +623,7 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
         let scopes = Array.isArray(connectParams.scopes) ? connectParams.scopes : [];
         connectParams.role = role;
         connectParams.scopes = scopes;
+        let nodeRoleAuthorized = role === "node";
 
         const isControlUi = isOperatorUiClient(connectParams.client);
         const isBrowserOperatorUi = isBrowserOperatorUiClient(connectParams.client);
@@ -1336,6 +1337,13 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
               : Array.isArray(paired.scopes)
                 ? paired.scopes
                 : [];
+            if (
+              role === "operator" &&
+              connectParams.client.mode === GATEWAY_CLIENT_MODES.NODE &&
+              pairedRoles.includes("node")
+            ) {
+              nodeRoleAuthorized = true;
+            }
             const allowedRoles = new Set(pairedRoles);
             if (allowedRoles.size === 0) {
               logUpgradeAudit("role-upgrade", pairedRoles, pairedScopes);
@@ -1468,7 +1476,7 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
             });
           }
         }
-        if (role === "node") {
+        if (nodeRoleAuthorized) {
           const reconciliation = await reconcileNodePairingOnConnect({
             cfg: getRuntimeConfig(),
             connectParams,
@@ -1565,7 +1573,14 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
           sharedGatewaySessionGeneration,
           presenceKey,
           clientIp: reportedClientIp,
-          ...(isTrustedApprovalRuntime ? { internal: { approvalRuntime: true } } : {}),
+          ...(isTrustedApprovalRuntime || nodeRoleAuthorized
+            ? {
+                internal: {
+                  ...(isTrustedApprovalRuntime ? { approvalRuntime: true } : {}),
+                  ...(nodeRoleAuthorized ? { nodeRoleAuthorized: true } : {}),
+                },
+              }
+            : {}),
           ...(Object.keys(pluginSurfaceUrls).length > 0 ? { pluginSurfaceUrls } : {}),
           ...(Object.keys(pluginNodeCapabilitySurfaces).length > 0
             ? { pluginNodeCapabilitySurfaces }
@@ -1615,14 +1630,14 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
             modelIdentifier: connectParams.client.modelIdentifier,
             mode: connectParams.client.mode,
             deviceId: device?.id,
-            roles: [role],
+            roles: nodeRoleAuthorized && role !== "node" ? [role, "node"] : [role],
             scopes,
             instanceId: device?.id ?? instanceId,
             reason: "connect",
           });
           incrementPresenceVersion();
         }
-        if (role === "node") {
+        if (nodeRoleAuthorized) {
           const context = buildRequestContext();
           const nodeSession = context.nodeRegistry.register(nextClient, {
             remoteIp: reportedClientIp,

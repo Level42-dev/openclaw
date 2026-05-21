@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  isClientAuthorizedForMethod,
   isRoleAuthorizedForMethod,
   parseGatewayRole,
   roleCanSkipDeviceIdentity,
@@ -28,5 +29,23 @@ describe("gateway role policy", () => {
     expect(isRoleAuthorizedForMethod("operator", "node.pluginSurface.refresh")).toBe(false);
     expect(isRoleAuthorizedForMethod("operator", "node.pending.drain")).toBe(false);
     expect(isRoleAuthorizedForMethod("operator", "node.event")).toBe(false);
+  });
+
+  test("authorizes node methods for operator sessions with approved node role access", () => {
+    expect(
+      isClientAuthorizedForMethod(
+        { connect: { role: "operator" }, internal: { nodeRoleAuthorized: true } } as never,
+        "node.invoke.result",
+      ),
+    ).toBe(true);
+    expect(
+      isClientAuthorizedForMethod(
+        { connect: { role: "operator" }, internal: { nodeRoleAuthorized: true } } as never,
+        "status",
+      ),
+    ).toBe(true);
+    expect(
+      isClientAuthorizedForMethod({ connect: { role: "operator" } } as never, "node.invoke.result"),
+    ).toBe(false);
   });
 });
