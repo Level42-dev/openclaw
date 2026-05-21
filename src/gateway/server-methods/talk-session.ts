@@ -721,4 +721,10 @@ export const talkSessionHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
     }
   },
+  "talk.realtime.relayCommit": ({ respond }) => {
+    respond(true, { ok: true }, undefined);
+  },
+  "talk.realtime.relayMark": ({ respond }) => {
+    respond(true, { ok: true }, undefined);
+  },
 };

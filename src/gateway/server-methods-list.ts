@@ -41,6 +41,7 @@ export const GATEWAY_EVENTS = [
   "tick",
   "talk.mode",
   "talk.event",
+  "talk.realtime.relay",
   "shutdown",
   "health",
   "heartbeat",

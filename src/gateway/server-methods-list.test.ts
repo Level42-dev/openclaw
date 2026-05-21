@@ -4,7 +4,7 @@ import { GATEWAY_EVENTS, listGatewayMethods } from "./server-methods-list.js";
 describe("GATEWAY_EVENTS", () => {
   it("advertises Talk event streams in hello features", () => {
     expect(GATEWAY_EVENTS).toContain("talk.event");
-    expect(GATEWAY_EVENTS).not.toContain("talk.realtime.relay");
+    expect(GATEWAY_EVENTS).toContain("talk.realtime.relay");
     expect(GATEWAY_EVENTS).not.toContain("talk.transcription.relay");
   });
 });
