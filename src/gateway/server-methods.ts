@@ -73,6 +73,16 @@ function asLegacyTalkParams(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function normalizeLegacyRelaySessionParams(
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized = { ...params };
+  const relaySessionId = normalized.relaySessionId;
+  delete normalized.relaySessionId;
+  normalized.sessionId = normalized.sessionId ?? relaySessionId;
+  return normalized;
+}
+
 function normalizeLegacyRealtimeRelayRequest(req: GatewayRequestOptions["req"]) {
   const params = asLegacyTalkParams(req.params);
   switch (req.method) {
@@ -91,19 +101,13 @@ function normalizeLegacyRealtimeRelayRequest(req: GatewayRequestOptions["req"]) 
       return {
         ...req,
         method: "talk.session.appendAudio",
-        params: {
-          ...params,
-          sessionId: params.sessionId ?? params.relaySessionId,
-        },
+        params: normalizeLegacyRelaySessionParams(params),
       };
     case "talk.realtime.relayStop":
       return {
         ...req,
         method: "talk.session.close",
-        params: {
-          ...params,
-          sessionId: params.sessionId ?? params.relaySessionId,
-        },
+        params: normalizeLegacyRelaySessionParams(params),
       };
     default:
       return req;
