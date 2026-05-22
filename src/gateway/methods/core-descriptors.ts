@@ -80,6 +80,8 @@ export const CORE_GATEWAY_METHOD_SPECS: readonly CoreGatewayMethodSpec[] = [
   { name: "talk.session.cancelOutput", scope: "operator.write" },
   { name: "talk.session.submitToolResult", scope: "operator.write" },
   { name: "talk.session.close", scope: "operator.write" },
+  { name: "talk.realtime.relayCommit", scope: "operator.write", advertise: false },
+  { name: "talk.realtime.relayMark", scope: "operator.write", advertise: false },
   { name: "talk.speak", scope: "operator.write" },
   { name: "talk.mode", scope: "operator.write" },
   { name: "commands.list", scope: "operator.read" },

@@ -67,6 +67,53 @@ import { voicewakeHandlers } from "./server-methods/voicewake.js";
 import { webHandlers } from "./server-methods/web.js";
 import { wizardHandlers } from "./server-methods/wizard.js";
 
+function asLegacyTalkParams(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function normalizeLegacyRelaySessionParams(
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized = { ...params };
+  const relaySessionId = normalized.relaySessionId;
+  delete normalized.relaySessionId;
+  normalized.sessionId = normalized.sessionId ?? relaySessionId;
+  return normalized;
+}
+
+function normalizeLegacyRealtimeRelayRequest(req: GatewayRequestOptions["req"]) {
+  const params = asLegacyTalkParams(req.params);
+  switch (req.method) {
+    case "talk.realtime.session":
+      return {
+        ...req,
+        method: "talk.session.create",
+        params: {
+          ...params,
+          mode: params.mode ?? "realtime",
+          transport: params.transport ?? "gateway-relay",
+          brain: params.brain ?? "agent-consult",
+        },
+      };
+    case "talk.realtime.relayAudio":
+      return {
+        ...req,
+        method: "talk.session.appendAudio",
+        params: normalizeLegacyRelaySessionParams(params),
+      };
+    case "talk.realtime.relayStop":
+      return {
+        ...req,
+        method: "talk.session.close",
+        params: normalizeLegacyRelaySessionParams(params),
+      };
+    default:
+      return req;
+  }
+}
+
 function authorizeGatewayMethod(
   method: string,
   client: GatewayRequestOptions["client"],
@@ -186,7 +233,8 @@ function createRequestGatewayMethodRegistry(
 export async function handleGatewayRequest(
   opts: GatewayRequestOptions & { extraHandlers?: GatewayRequestHandlers },
 ): Promise<void> {
-  const { req, respond, client, isWebchatConnect, context } = opts;
+  const { respond, client, isWebchatConnect, context } = opts;
+  const req = normalizeLegacyRealtimeRelayRequest(opts.req);
   const methodRegistry =
     opts.methodRegistry ?? createRequestGatewayMethodRegistry(opts.extraHandlers);
   const authError = authorizeGatewayMethod(req.method, client, req.params);

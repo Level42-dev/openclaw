@@ -378,6 +378,7 @@ describe("talk realtime gateway relay", () => {
     });
 
     const toolResultPayloads = events
+      .filter((entry) => entry.event === "talk.event")
       .map((entry) => entry.payload)
       .filter(
         (payload): payload is Record<string, unknown> =>

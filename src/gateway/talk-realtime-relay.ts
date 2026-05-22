@@ -28,6 +28,7 @@ const MAX_AUDIO_BASE64_BYTES = 512 * 1024;
 const MAX_RELAY_SESSIONS_PER_CONN = 2;
 const MAX_RELAY_SESSIONS_GLOBAL = 64;
 const RELAY_EVENT = "talk.event";
+const LEGACY_RELAY_EVENT = "talk.realtime.relay";
 
 type TalkRealtimeRelayEventPayload =
   | { relaySessionId: string; type: "ready" }
@@ -101,6 +102,7 @@ function broadcastToOwner(
   event: TalkRealtimeRelayEvent,
 ): void {
   context.broadcastToConnIds(RELAY_EVENT, event, new Set([connId]), { dropIfSlow: true });
+  context.broadcastToConnIds(LEGACY_RELAY_EVENT, event, new Set([connId]), { dropIfSlow: true });
 }
 
 function abortRelayAgentRuns(session: RelaySession, reason: string): void {

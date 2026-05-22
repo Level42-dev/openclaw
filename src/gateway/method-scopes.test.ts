@@ -64,6 +64,8 @@ describe("method scope resolution", () => {
     ["talk.session.cancelOutput", ["operator.write"]],
     ["talk.session.submitToolResult", ["operator.write"]],
     ["talk.session.close", ["operator.write"]],
+    ["talk.realtime.relayCommit", ["operator.write"]],
+    ["talk.realtime.relayMark", ["operator.write"]],
     ["update.status", ["operator.admin"]],
     ["config.schema", ["operator.admin"]],
     ["config.patch", ["operator.admin"]],
@@ -253,6 +255,8 @@ describe("operator scope authorization", () => {
       "talk.session.cancelOutput",
       "talk.session.submitToolResult",
       "talk.session.close",
+      "talk.realtime.relayCommit",
+      "talk.realtime.relayMark",
     ]) {
       expect(authorizeOperatorScopesForMethod(method, ["operator.write"])).toEqual({
         allowed: true,
