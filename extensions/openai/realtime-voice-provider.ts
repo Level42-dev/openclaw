@@ -362,6 +362,8 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
   private responseCreateInFlight = false;
   private responseCancelInFlight = false;
   private responseCreatePending = false;
+  private audioCommitPending = false;
+  private uncommittedAudioBytes = 0;
   private continuingToolCallIds = new Set<string>();
   private latestMediaTimestamp = 0;
   private lastAssistantItemId: string | null = null;
@@ -393,6 +395,7 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
       type: "input_audio_buffer.append",
       audio: audio.toString("base64"),
     });
+    this.uncommittedAudioBytes += audio.byteLength;
   }
 
   setMediaTimestamp(ts: number): void {
@@ -400,7 +403,16 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
   }
 
   commitAudio(): void {
+    if (!this.hasUncommittedAudio()) {
+      return;
+    }
+    if (!this.canCommitAudioNow()) {
+      this.audioCommitPending = true;
+      return;
+    }
+    this.audioCommitPending = false;
     this.sendEvent({ type: "input_audio_buffer.commit" });
+    this.uncommittedAudioBytes = 0;
     this.requestResponseCreate();
   }
 
@@ -863,6 +875,7 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
         for (const chunk of this.pendingAudio.splice(0)) {
           this.sendAudio(chunk);
         }
+        this.flushPendingAudioCommit();
         if (!this.sessionReadyFired) {
           this.sessionReadyFired = true;
           this.config.onReady?.();
@@ -938,6 +951,7 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
         this.responseActive = false;
         this.responseCreateInFlight = false;
         this.responseCancelInFlight = false;
+        this.flushPendingAudioCommit();
         this.flushPendingResponseCreate();
         return;
 
@@ -993,6 +1007,7 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
         if (detail === OPENAI_REALTIME_NO_ACTIVE_RESPONSE_CANCEL_ERROR) {
           this.responseActive = false;
           this.responseCancelInFlight = false;
+          this.flushPendingAudioCommit();
           this.flushPendingResponseCreate();
           return;
         }
@@ -1103,6 +1118,28 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     this.sendEvent({ type: "response.create" });
   }
 
+  private hasUncommittedAudio(): boolean {
+    return this.uncommittedAudioBytes > 0 || this.pendingAudio.length > 0;
+  }
+
+  private canCommitAudioNow(): boolean {
+    return (
+      this.connected &&
+      this.sessionConfigured &&
+      this.ws?.readyState === WebSocket.OPEN &&
+      !this.responseActive &&
+      !this.responseCreateInFlight &&
+      !this.responseCancelInFlight
+    );
+  }
+
+  private flushPendingAudioCommit(): void {
+    if (!this.audioCommitPending || !this.hasUncommittedAudio() || !this.canCommitAudioNow()) {
+      return;
+    }
+    this.commitAudio();
+  }
+
   private flushPendingResponseCreate(): void {
     if (!this.responseCreatePending) {
       return;
@@ -1118,6 +1155,8 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     this.responseCreateInFlight = false;
     this.responseCancelInFlight = false;
     this.responseCreatePending = false;
+    this.audioCommitPending = false;
+    this.uncommittedAudioBytes = 0;
     this.continuingToolCallIds.clear();
     this.lastAssistantItemId = null;
     this.toolCallBuffers.clear();

@@ -1416,6 +1416,70 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     expect(parseSent(socket).slice(-1)).toEqual([{ type: "response.create" }]);
   });
 
+  it("defers audio commits while a realtime response is active", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({ type: "response.created", response: { id: "resp_1" } })),
+    );
+
+    bridge.sendAudio(Buffer.from("audio-in"));
+    bridge.commitAudio?.();
+
+    expect(parseSent(socket).slice(-1)).toEqual([
+      {
+        type: "input_audio_buffer.append",
+        audio: Buffer.from("audio-in").toString("base64"),
+      },
+    ]);
+
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.done" })));
+
+    expect(parseSent(socket).slice(-2)).toEqual([
+      { type: "input_audio_buffer.commit" },
+      { type: "response.create" },
+    ]);
+  });
+
+  it("skips empty audio commits", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+
+    bridge.commitAudio?.();
+
+    expect(hasSentEventType(socket, "input_audio_buffer.commit")).toBe(false);
+    expect(hasSentEventType(socket, "response.create")).toBe(false);
+  });
+
   it("does not request a realtime response for continuing tool results", async () => {
     const provider = buildOpenAIRealtimeVoiceProvider();
     const bridge = provider.createBridge({

@@ -239,6 +239,7 @@ describe("talk logging", () => {
         talkBrain: "agent-consult",
         talkProvider: "openai",
         talkFinal: true,
+        talkErrorMessage: "provider failure with [redacted]",
       },
     });
     expect(JSON.stringify(observed)).not.toContain("private detail");

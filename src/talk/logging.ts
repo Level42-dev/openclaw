@@ -39,6 +39,12 @@ export function createTalkLogRecord(event: TalkEvent): TalkLogRecord | undefined
   if (typeof event.final === "boolean") {
     attributes.talkFinal = event.final;
   }
+  if (event.type === "session.error") {
+    const errorMessage = sanitizeTalkLogMessage(firstString(payload, ["message", "error"]));
+    if (errorMessage) {
+      attributes.talkErrorMessage = errorMessage;
+    }
+  }
 
   const durationMs = firstFiniteNumber(payload, ["durationMs", "latencyMs", "elapsedMs"]);
   if (durationMs !== undefined) {
@@ -94,4 +100,31 @@ function firstFiniteNumber(
     }
   }
   return undefined;
+}
+
+function firstString(
+  record: Record<string, unknown> | undefined,
+  keys: readonly string[],
+): string | undefined {
+  if (!record) {
+    return undefined;
+  }
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function sanitizeTalkLogMessage(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return value
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[redacted]")
+    .replace(/\b(token|secret|api[_-]?key)=\S+/gi, "$1=[redacted]")
+    .replace(/\bprivate detail\b/gi, "[redacted]")
+    .slice(0, 240);
 }
