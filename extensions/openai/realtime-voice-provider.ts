@@ -399,6 +399,11 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     this.latestMediaTimestamp = ts;
   }
 
+  commitAudio(): void {
+    this.sendEvent({ type: "input_audio_buffer.commit" });
+    this.requestResponseCreate();
+  }
+
   sendUserMessage(text: string): void {
     this.sendEvent({
       type: "conversation.item.create",

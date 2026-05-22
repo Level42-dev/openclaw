@@ -26,6 +26,7 @@ export type RealtimeVoiceBridgeSession = {
   bridge: RealtimeVoiceBridge;
   acknowledgeMark(): void;
   close(): void;
+  commitAudio(): void;
   connect(): Promise<void>;
   sendAudio(audio: Buffer): void;
   sendUserMessage(text: string): void;
@@ -72,6 +73,7 @@ export function createRealtimeVoiceBridgeSession(
     },
     acknowledgeMark: () => requireBridge().acknowledgeMark(),
     close: () => requireBridge().close(),
+    commitAudio: () => requireBridge().commitAudio?.(),
     connect: () => requireBridge().connect(),
     sendAudio: (audio) => requireBridge().sendAudio(audio),
     sendUserMessage: (text) => requireBridge().sendUserMessage?.(text),

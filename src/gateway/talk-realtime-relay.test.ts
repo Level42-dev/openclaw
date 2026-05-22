@@ -4,6 +4,7 @@ import type { RealtimeVoiceBridgeCreateRequest } from "../talk/provider-types.js
 import {
   cancelTalkRealtimeRelayTurn,
   clearTalkRealtimeRelaySessionsForTest,
+  commitTalkRealtimeRelayAudio,
   createTalkRealtimeRelaySession,
   registerTalkRealtimeRelayAgentRun,
   sendTalkRealtimeRelayAudio,
@@ -177,6 +178,7 @@ describe("talk realtime gateway relay", () => {
       }),
       sendAudio: vi.fn(),
       setMediaTimestamp: vi.fn(),
+      commitAudio: vi.fn(),
       sendUserMessage: vi.fn(),
       triggerGreeting: vi.fn(),
       handleBargeIn: vi.fn(),
@@ -309,6 +311,10 @@ describe("talk realtime gateway relay", () => {
       audioBase64: Buffer.from("audio-in").toString("base64"),
       timestamp: 123,
     });
+    commitTalkRealtimeRelayAudio({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+    });
     submitTalkRealtimeRelayToolResult({
       relaySessionId: session.relaySessionId,
       connId: "conn-1",
@@ -337,6 +343,7 @@ describe("talk realtime gateway relay", () => {
     stopTalkRealtimeRelaySession({ relaySessionId: session.relaySessionId, connId: "conn-1" });
 
     expect(bridge.sendAudio).toHaveBeenCalledWith(Buffer.from("audio-in"));
+    expect(bridge.commitAudio).toHaveBeenCalled();
     expect(bridge.sendUserMessage).toHaveBeenCalledWith("hello");
     expect(bridge.setMediaTimestamp).toHaveBeenCalledWith(123);
     expect(bridge.submitToolResult).toHaveBeenNthCalledWith(
@@ -365,6 +372,19 @@ describe("talk realtime gateway relay", () => {
       byteLength: Buffer.from("audio-in").byteLength,
     });
     expectRecordFields(inputAudioPayload.talkEvent, { type: "input.audio.delta" });
+
+    const inputAudioCommittedPayload = findEventPayload(
+      events,
+      (payload) => payload.type === "inputAudioCommitted",
+    );
+    expectRecordFields(inputAudioCommittedPayload, {
+      relaySessionId: session.relaySessionId,
+      type: "inputAudioCommitted",
+    });
+    expectRecordFields(inputAudioCommittedPayload.talkEvent, {
+      type: "input.audio.committed",
+      final: true,
+    });
 
     const clearPayload = findEventPayload(events, (payload) => payload.type === "clear");
     expectRecordFields(clearPayload, {

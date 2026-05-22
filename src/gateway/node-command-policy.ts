@@ -72,6 +72,7 @@ export const DEFAULT_DANGEROUS_NODE_COMMANDS = [
 ];
 
 const PLATFORM_DEFAULTS: Record<string, string[]> = {
+  embedded: [...DEVICE_COMMANDS],
   ios: [
     ...CAMERA_COMMANDS,
     ...LOCATION_COMMANDS,
@@ -120,9 +121,10 @@ const PLATFORM_DEFAULTS: Record<string, string[]> = {
   unknown: [...UNKNOWN_PLATFORM_COMMANDS],
 };
 
-type PlatformId = "ios" | "android" | "macos" | "windows" | "linux" | "unknown";
+type PlatformId = "embedded" | "ios" | "android" | "macos" | "windows" | "linux" | "unknown";
 
 const CANONICAL_PLATFORM_IDS = new Set<Exclude<PlatformId, "unknown">>([
+  "embedded",
   "ios",
   "android",
   "macos",
@@ -134,6 +136,7 @@ const DEVICE_FAMILY_TOKEN_RULES: ReadonlyArray<{
   id: Exclude<PlatformId, "unknown">;
   tokens: readonly string[];
 }> = [
+  { id: "embedded", tokens: ["voice-pe"] },
   { id: "ios", tokens: ["iphone", "ipad", "ios"] },
   { id: "android", tokens: ["android"] },
   { id: "macos", tokens: ["mac"] },
@@ -153,6 +156,8 @@ function platformMatchesDeviceFamily(
   family: string,
 ): boolean {
   switch (platformId) {
+    case "embedded":
+      return /^(?:voice-pe)$/.test(family);
     case "ios":
       return family === "" || /^(?:iphone|ipad|ios)$/.test(family);
     case "android":
@@ -171,6 +176,9 @@ function resolvePlatformIdByNativeLabel(
   platform: string,
   deviceFamily: string,
 ): Exclude<PlatformId, "unknown"> | undefined {
+  if (platform === "esp32-s3") {
+    return deviceFamily === "voice-pe" ? "embedded" : undefined;
+  }
   if (/^(?:ios|ipados) \d+(?:\.\d+){0,2}$/.test(platform)) {
     return /^(?:iphone|ipad|ios)$/.test(deviceFamily) ? "ios" : undefined;
   }
@@ -231,6 +239,9 @@ export function listDangerousPluginNodeCommands(): string[] {
 function listDefaultPluginNodeCommands(platformId: PlatformId): string[] {
   const registry = getActiveRuntimePluginRegistry();
   if (!registry) {
+    return [];
+  }
+  if (platformId === "embedded") {
     return [];
   }
   const commands = (registry.nodeInvokePolicies ?? []).flatMap((entry) => {

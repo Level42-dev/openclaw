@@ -33,6 +33,7 @@ const LEGACY_RELAY_EVENT = "talk.realtime.relay";
 type TalkRealtimeRelayEventPayload =
   | { relaySessionId: string; type: "ready" }
   | { relaySessionId: string; type: "inputAudio"; byteLength: number }
+  | { relaySessionId: string; type: "inputAudioCommitted" }
   | { relaySessionId: string; type: "audio"; audioBase64: string }
   | { relaySessionId: string; type: "clear" }
   | { relaySessionId: string; type: "mark"; markName: string }
@@ -395,6 +396,25 @@ export function sendTalkRealtimeRelayAudio(params: {
   if (typeof params.timestamp === "number" && Number.isFinite(params.timestamp)) {
     session.bridge.setMediaTimestamp(params.timestamp);
   }
+}
+
+export function commitTalkRealtimeRelayAudio(params: {
+  relaySessionId: string;
+  connId: string;
+}): void {
+  const session = getRelaySession(params.relaySessionId, params.connId);
+  session.bridge.commitAudio();
+  const turnId = ensureRelayTurn(session);
+  broadcastToOwner(session.context, session.connId, {
+    relaySessionId: session.id,
+    type: "inputAudioCommitted",
+    talkEvent: session.talk.emit({
+      type: "input.audio.committed",
+      turnId,
+      payload: null,
+      final: true,
+    }),
+  });
 }
 
 export function submitTalkRealtimeRelayToolResult(params: {

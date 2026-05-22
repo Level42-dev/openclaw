@@ -33,6 +33,10 @@ function resolveApprovedReconnectCommands(params: {
   });
 }
 
+function uniqueApprovalSurfaceList(commands: readonly string[]): string[] {
+  return [...new Set(normalizeApprovalSurfaceList(commands))];
+}
+
 function normalizeApprovalSurfaceList(value: readonly string[] | undefined): string[] {
   return normalizeArrayBackedTrimmedStringList(value) ?? [];
 }
@@ -151,7 +155,8 @@ export async function reconcileNodePairingOnConnect(params: {
     caps: params.connectParams.caps,
     commands: params.connectParams.commands,
   };
-  const pairingAllowlist = resolveNodePairingCommandAllowlist(params.cfg, policyNode);
+  const nodePolicyContext = policyNode;
+  const pairingAllowlist = resolveNodePairingCommandAllowlist(params.cfg, nodePolicyContext);
   const declared = normalizeDeclaredNodeCommands({
     declaredCommands: Array.isArray(params.connectParams.commands)
       ? params.connectParams.commands
@@ -185,16 +190,24 @@ export async function reconcileNodePairingOnConnect(params: {
   }
 
   const runtimeAllowlist = resolveNodeCommandAllowlist(params.cfg, {
-    ...policyNode,
+    ...nodePolicyContext,
     approvedCommands: params.pairedNode.commands,
   });
+  const defaultAllowlist = resolveNodeCommandAllowlist({}, nodePolicyContext);
+  const safeDefaultCommands = declared.filter((command) => defaultAllowlist.has(command));
   const approvedCommands = resolveApprovedReconnectCommands({
     pairedCommands: params.pairedNode.commands,
     allowlist: runtimeAllowlist,
   });
+  const effectiveApprovedCommands = uniqueApprovalSurfaceList([
+    ...approvedCommands,
+    ...safeDefaultCommands,
+  ]);
   const approvedCaps = normalizeApprovalSurfaceList(params.pairedNode.caps);
   const approvedPermissions = normalizePermissionMap(params.pairedNode.permissions);
-  const hasCommandUpgrade = declared.some((command) => !approvedCommands.includes(command));
+  const hasCommandUpgrade = declared.some(
+    (command) => !effectiveApprovedCommands.includes(command),
+  );
   const hasCapabilityChange = !sameApprovalSurfaceSet(params.pairedNode.caps, declaredCaps);
   const hasPermissionChange = !samePermissions(params.pairedNode.permissions, declaredPermissions);
   const effectiveApprovedDeclaredCaps = intersectApprovalSurfaceList({
@@ -202,7 +215,7 @@ export async function reconcileNodePairingOnConnect(params: {
     declared: declaredCaps,
   });
   const effectiveApprovedDeclaredCommands = intersectApprovalSurfaceList({
-    approved: approvedCommands,
+    approved: effectiveApprovedCommands,
     declared,
   });
   const effectiveApprovedDeclaredPermissions = intersectPermissionSurface({

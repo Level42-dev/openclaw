@@ -31,6 +31,7 @@ import {
 } from "../talk-handoff.js";
 import {
   cancelTalkRealtimeRelayTurn,
+  commitTalkRealtimeRelayAudio,
   createTalkRealtimeRelaySession,
   sendTalkRealtimeRelayAudio,
   stopTalkRealtimeRelaySession,
@@ -721,8 +722,41 @@ export const talkSessionHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
     }
   },
-  "talk.realtime.relayCommit": ({ respond }) => {
-    respond(true, { ok: true }, undefined);
+  "talk.realtime.relayCommit": ({ params, respond, client }) => {
+    const sessionId =
+      normalizeOptionalString(
+        (params as { sessionId?: unknown; relaySessionId?: unknown })?.sessionId,
+      ) ??
+      normalizeOptionalString(
+        (params as { sessionId?: unknown; relaySessionId?: unknown })?.relaySessionId,
+      );
+    if (!sessionId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "talk.realtime.relayCommit requires sessionId"),
+      );
+      return;
+    }
+    try {
+      const session = getUnifiedTalkSession(sessionId);
+      if (session.kind !== "realtime-relay") {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            "talk.realtime.relayCommit requires realtime relay",
+          ),
+        );
+        return;
+      }
+      const connId = requireUnifiedTalkSessionConn(session, client?.connId);
+      commitTalkRealtimeRelayAudio({ relaySessionId: session.relaySessionId, connId });
+      respond(true, { ok: true }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
   },
   "talk.realtime.relayMark": ({ respond }) => {
     respond(true, { ok: true }, undefined);
