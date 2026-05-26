@@ -233,6 +233,8 @@ describe("talk realtime gateway relay", () => {
       instructions: "be brief",
       autoRespondToAudio: false,
       interruptResponseOnInputAudio: false,
+      minAudioCommitDurationMs: 100,
+      responseOutputModalities: ["audio"],
     });
 
     const readyPayload = findEventPayload(events, (payload) => payload.type === "ready");
@@ -436,6 +438,132 @@ describe("talk realtime gateway relay", () => {
       reason: "completed",
     });
     expectRecordFields(closePayload.talkEvent, { type: "session.closed", final: true });
+  });
+
+  it("marks skipped relay audio commits without treating them as normal provider commits", async () => {
+    const bridge = {
+      supportsToolResultContinuation: true,
+      connect: vi.fn(async () => undefined),
+      sendAudio: vi.fn(),
+      setMediaTimestamp: vi.fn(),
+      commitAudio: vi.fn(() => ({
+        status: "skipped" as const,
+        reason: "too_short" as const,
+        byteLength: 480,
+        minByteLength: 4800,
+        minDurationMs: 100,
+      })),
+      sendUserMessage: vi.fn(),
+      triggerGreeting: vi.fn(),
+      handleBargeIn: vi.fn(),
+      submitToolResult: vi.fn(),
+      acknowledgeMark: vi.fn(),
+      close: vi.fn(),
+      isConnected: vi.fn(() => true),
+    };
+    const provider: RealtimeVoiceProviderPlugin = {
+      id: "relay-test",
+      label: "Relay Test",
+      isConfigured: () => true,
+      createBridge: () => bridge,
+    };
+    const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
+    const context = {
+      broadcastToConnIds: (event: string, payload: Record<string, unknown>) => {
+        events.push({ event, payload });
+      },
+    } as never;
+    const session = createTalkRealtimeRelaySession({
+      context,
+      connId: "conn-1",
+      provider,
+      providerConfig: {},
+      instructions: "brief",
+      tools: [],
+    });
+
+    commitTalkRealtimeRelayAudio({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+    });
+
+    expect(bridge.commitAudio).toHaveBeenCalled();
+    const committedPayload = findEventPayload(
+      events,
+      (payload) => payload.type === "inputAudioCommitted",
+    );
+    expectRecordFields(committedPayload.talkEvent, {
+      type: "input.audio.committed",
+      final: true,
+    });
+    expectRecordFields((committedPayload.talkEvent as { payload?: unknown }).payload, {
+      status: "skipped",
+      reason: "too_short",
+      byteLength: 480,
+      minByteLength: 4800,
+      minDurationMs: 100,
+    });
+  });
+
+  it("records sanitized realtime bridge markers as talk metrics", async () => {
+    let bridgeRequest: RealtimeVoiceBridgeCreateRequest | undefined;
+    const provider: RealtimeVoiceProviderPlugin = {
+      id: "relay-test",
+      label: "Relay Test",
+      isConfigured: () => true,
+      createBridge: (req) => {
+        bridgeRequest = req;
+        return {
+          supportsToolResultContinuation: true,
+          connect: vi.fn(async () => undefined),
+          sendAudio: vi.fn(),
+          setMediaTimestamp: vi.fn(),
+          commitAudio: vi.fn(),
+          sendUserMessage: vi.fn(),
+          triggerGreeting: vi.fn(),
+          handleBargeIn: vi.fn(),
+          submitToolResult: vi.fn(),
+          acknowledgeMark: vi.fn(),
+          close: vi.fn(),
+          isConnected: vi.fn(() => true),
+        };
+      },
+    };
+    const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
+    const context = {
+      broadcastToConnIds: (event: string, payload: Record<string, unknown>) => {
+        events.push({ event, payload });
+      },
+    } as never;
+    const session = createTalkRealtimeRelaySession({
+      context,
+      connId: "conn-1",
+      provider,
+      providerConfig: {},
+      instructions: "brief",
+      tools: [],
+    });
+
+    bridgeRequest?.onEvent?.({
+      direction: "server",
+      type: "response.output_audio.delta.bytes",
+      detail: "byteLength=640",
+    });
+
+    const markerPayload = findEventPayload(events, (payload) => payload.type === "marker");
+    expectRecordFields(markerPayload, {
+      relaySessionId: session.relaySessionId,
+      type: "marker",
+    });
+    expectRecordFields(markerPayload.talkEvent, {
+      type: "usage.metrics",
+      payload: {
+        marker: "realtime.bridge.event",
+        direction: "server",
+        eventType: "response.output_audio.delta.bytes",
+        detail: "byteLength=640",
+      },
+    });
   });
 
   it("rejects relay control from a different connection", () => {

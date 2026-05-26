@@ -54,6 +54,26 @@ export function createTalkLogRecord(event: TalkEvent): TalkLogRecord | undefined
   if (byteLength !== undefined) {
     attributes.talkByteLength = byteLength;
   }
+  const marker = sanitizeTalkLogMessage(firstString(payload, ["marker"]));
+  if (marker) {
+    attributes.talkMarker = marker;
+  }
+  const bridgeDirection = sanitizeTalkLogMessage(firstString(payload, ["direction"]));
+  if (bridgeDirection) {
+    attributes.talkBridgeDirection = bridgeDirection;
+  }
+  const bridgeEventType = sanitizeTalkLogMessage(firstString(payload, ["eventType"]));
+  if (bridgeEventType) {
+    attributes.talkBridgeEventType = bridgeEventType;
+  }
+  const detail = sanitizeTalkLogMessage(firstString(payload, ["detail", "reason"]));
+  if (detail) {
+    attributes.talkDetail = detail;
+  }
+  const status = sanitizeTalkLogMessage(firstString(payload, ["status"]));
+  if (status) {
+    attributes.talkStatus = status;
+  }
 
   return {
     level: event.type === "session.error" || event.type === "tool.error" ? "warn" : "info",

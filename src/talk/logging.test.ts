@@ -184,6 +184,45 @@ describe("talk logging", () => {
     expect(logs).toHaveLength(0);
   });
 
+  it("logs sanitized realtime bridge markers without raw payloads", () => {
+    const events = createTalkEventSequencer({
+      sessionId: "talk-session",
+      mode: "realtime",
+      transport: "gateway-relay",
+      brain: "agent-consult",
+      provider: "openai",
+    });
+
+    const record = createTalkLogRecord(
+      events.next({
+        type: "usage.metrics",
+        payload: {
+          marker: "realtime.bridge.event",
+          direction: "server",
+          eventType: "response.output_audio.delta.bytes",
+          detail: "byteLength=640 token=private-token",
+        },
+      }),
+    );
+
+    expect(record).toEqual({
+      level: "info",
+      message: "talk event usage.metrics",
+      attributes: {
+        sessionId: "talk-session",
+        talkEventType: "usage.metrics",
+        talkMode: "realtime",
+        talkTransport: "gateway-relay",
+        talkBrain: "agent-consult",
+        talkProvider: "openai",
+        talkMarker: "realtime.bridge.event",
+        talkBridgeDirection: "server",
+        talkBridgeEventType: "response.output_audio.delta.bytes",
+        talkDetail: "byteLength=640 token=[redacted]",
+      },
+    });
+  });
+
   it("records diagnostics and logs through the combined observability hook", async () => {
     const observed: ObservedDiagnostic[] = [];
     const unsubscribe = onInternalDiagnosticEvent((event, metadata) => {
