@@ -2,6 +2,7 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { RealtimeVoiceProviderPlugin } from "../plugins/types.js";
 import type {
   RealtimeVoiceBridge,
+  RealtimeVoiceAudioCommitResult,
   RealtimeVoiceAudioFormat,
   RealtimeVoiceBargeInOptions,
   RealtimeVoiceCloseReason,
@@ -26,7 +27,7 @@ export type RealtimeVoiceBridgeSession = {
   bridge: RealtimeVoiceBridge;
   acknowledgeMark(): void;
   close(): void;
-  commitAudio(): void;
+  commitAudio(): RealtimeVoiceAudioCommitResult | undefined;
   connect(): Promise<void>;
   sendAudio(audio: Buffer): void;
   sendUserMessage(text: string): void;
@@ -46,6 +47,7 @@ export type RealtimeVoiceBridgeSessionParams = {
   initialGreetingInstructions?: string;
   autoRespondToAudio?: boolean;
   interruptResponseOnInputAudio?: boolean;
+  minAudioCommitDurationMs?: number;
   responseOutputModalities?: Array<"audio" | "text">;
   markStrategy?: RealtimeVoiceMarkStrategy;
   triggerGreetingOnReady?: boolean;
@@ -92,6 +94,7 @@ export function createRealtimeVoiceBridgeSession(
     instructions: params.instructions,
     autoRespondToAudio: params.autoRespondToAudio,
     interruptResponseOnInputAudio: params.interruptResponseOnInputAudio,
+    minAudioCommitDurationMs: params.minAudioCommitDurationMs,
     responseOutputModalities: params.responseOutputModalities,
     tools: params.tools,
     onAudio: (audio) => {

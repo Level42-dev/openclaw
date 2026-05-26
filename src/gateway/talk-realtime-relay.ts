@@ -27,6 +27,7 @@ const RELAY_SESSION_TTL_MS = 30 * 60 * 1000;
 const MAX_AUDIO_BASE64_BYTES = 512 * 1024;
 const MAX_RELAY_SESSIONS_PER_CONN = 2;
 const MAX_RELAY_SESSIONS_GLOBAL = 64;
+const MIN_RELAY_AUDIO_COMMIT_DURATION_MS = 100;
 const RELAY_EVENT = "talk.event";
 const LEGACY_RELAY_EVENT = "talk.realtime.relay";
 
@@ -34,6 +35,7 @@ type TalkRealtimeRelayEventPayload =
   | { relaySessionId: string; type: "ready" }
   | { relaySessionId: string; type: "inputAudio"; byteLength: number }
   | { relaySessionId: string; type: "inputAudioCommitted" }
+  | { relaySessionId: string; type: "marker" }
   | { relaySessionId: string; type: "audio"; audioBase64: string }
   | { relaySessionId: string; type: "clear" }
   | { relaySessionId: string; type: "mark"; markName: string }
@@ -163,6 +165,16 @@ function enforceRelaySessionLimits(connId: string): void {
   }
 }
 
+function shouldRecordRelayBridgeEvent(type: string): boolean {
+  return (
+    type === "response.create" ||
+    type === "response.created" ||
+    type === "input_audio_buffer.commit.skipped" ||
+    type.endsWith(".output_audio.delta.bytes") ||
+    type.endsWith(".audio.delta.bytes")
+  );
+}
+
 export function createTalkRealtimeRelaySession(
   params: CreateTalkRealtimeRelaySessionParams,
 ): TalkRealtimeRelaySessionResult {
@@ -194,6 +206,7 @@ export function createTalkRealtimeRelaySession(
     instructions: params.instructions,
     autoRespondToAudio: false,
     interruptResponseOnInputAudio: false,
+    minAudioCommitDurationMs: MIN_RELAY_AUDIO_COMMIT_DURATION_MS,
     responseOutputModalities: ["audio"],
     tools: params.tools,
     markStrategy: "ack-immediately",
@@ -282,6 +295,26 @@ export function createTalkRealtimeRelaySession(
           payload: { name: toolCall.name, args: toolCall.args },
         },
       );
+    },
+    onEvent: (event) => {
+      if (!shouldRecordRelayBridgeEvent(event.type)) {
+        return;
+      }
+      const turnId = relay?.talk.activeTurnId;
+      const markerPayload = {
+        marker: "realtime.bridge.event",
+        direction: event.direction,
+        eventType: event.type,
+        ...(event.detail ? { detail: event.detail } : {}),
+      };
+      const talkEventInput: TalkEventInput = {
+        type: "usage.metrics",
+        payload: markerPayload,
+      };
+      if (turnId) {
+        talkEventInput.turnId = turnId;
+      }
+      emit({ relaySessionId, type: "marker" }, talkEventInput);
     },
     onReady: () =>
       emit({ relaySessionId, type: "ready" }, { type: "session.ready", payload: null }),
@@ -404,15 +437,36 @@ export function commitTalkRealtimeRelayAudio(params: {
   connId: string;
 }): void {
   const session = getRelaySession(params.relaySessionId, params.connId);
-  session.bridge.commitAudio();
   const turnId = ensureRelayTurn(session);
+  const result = session.bridge.commitAudio();
+  if (result?.status === "skipped") {
+    broadcastToOwner(session.context, session.connId, {
+      relaySessionId: session.id,
+      type: "inputAudioCommitted",
+      talkEvent: session.talk.emit({
+        type: "input.audio.committed",
+        turnId,
+        payload: {
+          status: "skipped",
+          reason: result.reason,
+          byteLength: result.byteLength,
+          minByteLength: result.minByteLength,
+          minDurationMs: result.minDurationMs,
+        },
+        final: true,
+      }),
+    });
+    return;
+  }
   broadcastToOwner(session.context, session.connId, {
     relaySessionId: session.id,
     type: "inputAudioCommitted",
     talkEvent: session.talk.emit({
       type: "input.audio.committed",
       turnId,
-      payload: null,
+      payload: result
+        ? { status: "committed", byteLength: result.byteLength }
+        : { status: "unknown" },
       final: true,
     }),
   });

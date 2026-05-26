@@ -64,6 +64,19 @@ export type RealtimeVoiceBridgeEvent = {
   detail?: string;
 };
 
+export type RealtimeVoiceAudioCommitResult =
+  | {
+      status: "committed";
+      byteLength: number;
+    }
+  | {
+      status: "skipped";
+      reason: "empty" | "too_short";
+      byteLength: number;
+      minByteLength: number;
+      minDurationMs: number;
+    };
+
 export type RealtimeVoiceBridgeCallbacks = {
   onAudio: (audio: Buffer) => void;
   onClearAudio: () => void;
@@ -106,6 +119,7 @@ export type RealtimeVoiceBridgeCreateRequest = RealtimeVoiceBridgeCallbacks & {
   instructions?: string;
   autoRespondToAudio?: boolean;
   interruptResponseOnInputAudio?: boolean;
+  minAudioCommitDurationMs?: number;
   responseOutputModalities?: Array<"audio" | "text">;
   tools?: RealtimeVoiceTool[];
 };
@@ -185,7 +199,7 @@ export type RealtimeVoiceBridge = {
   connect(): Promise<void>;
   sendAudio(audio: Buffer): void;
   setMediaTimestamp(ts: number): void;
-  commitAudio?(): void;
+  commitAudio?(): RealtimeVoiceAudioCommitResult | undefined;
   sendUserMessage?(text: string): void;
   triggerGreeting?(instructions?: string): void;
   handleBargeIn?(options?: RealtimeVoiceBargeInOptions): void;

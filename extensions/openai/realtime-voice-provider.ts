@@ -12,6 +12,7 @@ import {
 } from "openclaw/plugin-sdk/proxy-capture";
 import type {
   RealtimeVoiceAudioFormat,
+  RealtimeVoiceAudioCommitResult,
   RealtimeVoiceBargeInOptions,
   RealtimeVoiceBridge,
   RealtimeVoiceBrowserSession,
@@ -62,6 +63,7 @@ type OpenAIRealtimeVoiceProviderConfig = {
   prefixPaddingMs?: number;
   interruptResponseOnInputAudio?: boolean;
   minBargeInAudioEndMs?: number;
+  minAudioCommitDurationMs?: number;
   reasoningEffort?: string;
   azureEndpoint?: string;
   azureDeployment?: string;
@@ -402,18 +404,52 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     this.latestMediaTimestamp = ts;
   }
 
-  commitAudio(): void {
-    if (!this.hasUncommittedAudio()) {
-      return;
+  commitAudio(): RealtimeVoiceAudioCommitResult {
+    const byteLength = this.uncommittedAudioByteLength();
+    const minByteLength = this.minAudioCommitByteLength();
+    const minDurationMs = this.config.minAudioCommitDurationMs ?? 0;
+    if (byteLength <= 0) {
+      const result: RealtimeVoiceAudioCommitResult = {
+        status: "skipped",
+        reason: "empty",
+        byteLength,
+        minByteLength,
+        minDurationMs,
+      };
+      this.config.onEvent?.({
+        direction: "client",
+        type: "input_audio_buffer.commit.skipped",
+        detail: this.formatCommitSkipDetail(result),
+      });
+      return result;
+    }
+    if (byteLength < minByteLength) {
+      const result: RealtimeVoiceAudioCommitResult = {
+        status: "skipped",
+        reason: "too_short",
+        byteLength,
+        minByteLength,
+        minDurationMs,
+      };
+      this.config.onEvent?.({
+        direction: "client",
+        type: "input_audio_buffer.commit.skipped",
+        detail: this.formatCommitSkipDetail(result),
+      });
+      this.clearProviderAudioBufferIfNeeded();
+      this.pendingAudio = [];
+      this.uncommittedAudioBytes = 0;
+      return result;
     }
     if (!this.canCommitAudioNow()) {
       this.audioCommitPending = true;
-      return;
+      return { status: "committed", byteLength };
     }
     this.audioCommitPending = false;
     this.sendEvent({ type: "input_audio_buffer.commit" });
     this.uncommittedAudioBytes = 0;
     this.requestResponseCreate();
+    return { status: "committed", byteLength };
   }
 
   sendUserMessage(text: string): void {
@@ -895,6 +931,11 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
           return;
         }
         const audio = base64ToBuffer(audioDelta);
+        this.config.onEvent?.({
+          direction: "server",
+          type: `${event.type}.bytes`,
+          detail: `byteLength=${audio.byteLength}`,
+        });
         this.config.onAudio(audio);
         if (event.item_id && event.item_id !== this.lastAssistantItemId) {
           this.lastAssistantItemId = event.item_id;
@@ -1115,7 +1156,8 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     }
     this.responseCreatePending = false;
     this.responseCreateInFlight = true;
-    this.sendEvent(this.buildResponseCreateEvent());
+    const event = this.buildResponseCreateEvent();
+    this.sendEvent(event, this.describeResponseCreateEvent(event));
   }
 
   private buildResponseCreateEvent(): {
@@ -1129,7 +1171,49 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
   }
 
   private hasUncommittedAudio(): boolean {
-    return this.uncommittedAudioBytes > 0 || this.pendingAudio.length > 0;
+    return this.uncommittedAudioByteLength() > 0;
+  }
+
+  private uncommittedAudioByteLength(): number {
+    return (
+      this.uncommittedAudioBytes +
+      this.pendingAudio.reduce((total, chunk) => total + chunk.byteLength, 0)
+    );
+  }
+
+  private minAudioCommitByteLength(): number {
+    const durationMs = this.config.minAudioCommitDurationMs ?? 0;
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
+      return 1;
+    }
+    const bytesPerSample = this.audioFormat.encoding === "pcm16" ? 2 : 1;
+    return Math.ceil(
+      (this.audioFormat.sampleRateHz * this.audioFormat.channels * bytesPerSample * durationMs) /
+        1000,
+    );
+  }
+
+  private clearProviderAudioBufferIfNeeded(): void {
+    if (
+      this.uncommittedAudioBytes <= 0 ||
+      !this.connected ||
+      !this.sessionConfigured ||
+      this.ws?.readyState !== WebSocket.OPEN
+    ) {
+      return;
+    }
+    this.sendEvent({ type: "input_audio_buffer.clear" });
+  }
+
+  private formatCommitSkipDetail(
+    result: Extract<RealtimeVoiceAudioCommitResult, { status: "skipped" }>,
+  ): string {
+    return [
+      `reason=${result.reason}`,
+      `byteLength=${result.byteLength}`,
+      `minByteLength=${result.minByteLength}`,
+      `minDurationMs=${result.minDurationMs}`,
+    ].join(" ");
   }
 
   private canCommitAudioNow(): boolean {
@@ -1202,6 +1286,13 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     }
   }
 
+  private describeResponseCreateEvent(event: {
+    response?: { output_modalities?: string[] };
+  }): string {
+    const modalities = event.response?.output_modalities;
+    return `outputModalities=${modalities && modalities.length > 0 ? modalities.join(",") : "default"}`;
+  }
+
   private describeServerEvent(event: RealtimeEvent): string | undefined {
     if (event.type === "error") {
       return readRealtimeErrorDetail(event.error);
@@ -1215,6 +1306,9 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
       return (
         [status ? `status=${status}` : undefined, details].filter(Boolean).join(" ") || undefined
       );
+    }
+    if (event.type === "response.created") {
+      return event.response?.id ? "responseId=present" : undefined;
     }
     if (event.type === "response.cancelled") {
       return "cancelled";

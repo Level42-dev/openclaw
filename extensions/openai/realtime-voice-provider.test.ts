@@ -1102,11 +1102,13 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
   it("forwards current realtime output audio events", async () => {
     const provider = buildOpenAIRealtimeVoiceProvider();
     const onAudio = vi.fn();
+    const onEvent = vi.fn();
     const onTranscript = vi.fn();
     const bridge = provider.createBridge({
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
       onAudio,
       onClearAudio: vi.fn(),
+      onEvent,
       onTranscript,
     });
     const connecting = bridge.connect();
@@ -1142,6 +1144,11 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     );
 
     expect(onAudio).toHaveBeenCalledWith(audio);
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "server",
+      type: "response.output_audio.delta.bytes",
+      detail: `byteLength=${audio.byteLength}`,
+    });
     expect(onTranscript).toHaveBeenCalledWith(
       "assistant",
       "hello from current realtime events",
@@ -1377,7 +1384,11 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     ]);
     expect(JSON.stringify(parseSent(socket).at(-1))).not.toContain("output_modalities");
     expect(onEvent).toHaveBeenCalledWith({ direction: "client", type: "conversation.item.create" });
-    expect(onEvent).toHaveBeenCalledWith({ direction: "client", type: "response.create" });
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "client",
+      type: "response.create",
+      detail: "outputModalities=default",
+    });
   });
 
   it("defers manual response.create while a realtime response is active", async () => {
@@ -1494,10 +1505,12 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
 
   it("skips empty audio commits", async () => {
     const provider = buildOpenAIRealtimeVoiceProvider();
+    const onEvent = vi.fn();
     const bridge = provider.createBridge({
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
       onAudio: vi.fn(),
       onClearAudio: vi.fn(),
+      onEvent,
       responseOutputModalities: ["audio"],
     });
     const connecting = bridge.connect();
@@ -1511,10 +1524,149 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
     await connecting;
 
-    bridge.commitAudio?.();
+    const result = bridge.commitAudio?.();
 
+    expect(result).toEqual({
+      status: "skipped",
+      reason: "empty",
+      byteLength: 0,
+      minByteLength: 1,
+      minDurationMs: 0,
+    });
     expect(hasSentEventType(socket, "input_audio_buffer.commit")).toBe(false);
     expect(hasSentEventType(socket, "response.create")).toBe(false);
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "client",
+      type: "input_audio_buffer.commit.skipped",
+      detail: "reason=empty byteLength=0 minByteLength=1 minDurationMs=0",
+    });
+  });
+
+  it("skips too-short audio commits when a minimum duration is configured", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const onEvent = vi.fn();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      audioFormat: { encoding: "pcm16", sampleRateHz: 24000, channels: 1 },
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+      onEvent,
+      minAudioCommitDurationMs: 100,
+      responseOutputModalities: ["audio"],
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+
+    bridge.sendAudio(Buffer.alloc(480));
+    const result = bridge.commitAudio?.();
+
+    expect(result).toEqual({
+      status: "skipped",
+      reason: "too_short",
+      byteLength: 480,
+      minByteLength: 4800,
+      minDurationMs: 100,
+    });
+    expect(hasSentEventType(socket, "input_audio_buffer.commit")).toBe(false);
+    expect(hasSentEventType(socket, "response.create")).toBe(false);
+    expect(hasSentEventType(socket, "input_audio_buffer.clear")).toBe(true);
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "client",
+      type: "input_audio_buffer.commit.skipped",
+      detail: "reason=too_short byteLength=480 minByteLength=4800 minDurationMs=100",
+    });
+  });
+
+  it("clears provider-side input audio when skipping already-appended too-short audio", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      audioFormat: { encoding: "pcm16", sampleRateHz: 24000, channels: 1 },
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+      minAudioCommitDurationMs: 100,
+      responseOutputModalities: ["audio"],
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+
+    bridge.sendAudio(Buffer.alloc(480));
+    expect(bridge.commitAudio?.()).toMatchObject({ status: "skipped", reason: "too_short" });
+
+    const validAudio = Buffer.alloc(4800);
+    bridge.sendAudio(validAudio);
+    expect(bridge.commitAudio?.()).toEqual({ status: "committed", byteLength: 4800 });
+
+    expect(parseSent(socket).slice(-4)).toEqual([
+      { type: "input_audio_buffer.clear" },
+      {
+        type: "input_audio_buffer.append",
+        audio: validAudio.toString("base64"),
+      },
+      { type: "input_audio_buffer.commit" },
+      { type: "response.create", response: { output_modalities: ["audio"] } },
+    ]);
+  });
+
+  it("skips too-short pending audio before the realtime session is configured", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const onEvent = vi.fn();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      audioFormat: { encoding: "pcm16", sampleRateHz: 24000, channels: 1 },
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+      onEvent,
+      minAudioCommitDurationMs: 100,
+      responseOutputModalities: ["audio"],
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+
+    bridge.sendAudio(Buffer.alloc(480));
+    const result = bridge.commitAudio?.();
+
+    expect(result).toEqual({
+      status: "skipped",
+      reason: "too_short",
+      byteLength: 480,
+      minByteLength: 4800,
+      minDurationMs: 100,
+    });
+    expect(hasSentEventType(socket, "input_audio_buffer.append")).toBe(false);
+    expect(hasSentEventType(socket, "input_audio_buffer.commit")).toBe(false);
+    expect(hasSentEventType(socket, "response.create")).toBe(false);
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "client",
+      type: "input_audio_buffer.commit.skipped",
+      detail: "reason=too_short byteLength=480 minByteLength=4800 minDurationMs=100",
+    });
+
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+    expect(hasSentEventType(socket, "input_audio_buffer.append")).toBe(false);
   });
 
   it("does not request a realtime response for continuing tool results", async () => {
