@@ -234,6 +234,7 @@ describe("talk realtime gateway relay", () => {
       autoRespondToAudio: false,
       interruptResponseOnInputAudio: false,
       minAudioCommitDurationMs: 100,
+      requestResponseOnAudioCommit: false,
       responseOutputModalities: ["audio"],
     });
 
