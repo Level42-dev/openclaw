@@ -1115,7 +1115,17 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     }
     this.responseCreatePending = false;
     this.responseCreateInFlight = true;
-    this.sendEvent({ type: "response.create" });
+    this.sendEvent(this.buildResponseCreateEvent());
+  }
+
+  private buildResponseCreateEvent(): {
+    type: "response.create";
+    response?: { output_modalities: string[] };
+  } {
+    const outputModalities = this.config.responseOutputModalities;
+    return outputModalities && outputModalities.length > 0
+      ? { type: "response.create", response: { output_modalities: [...outputModalities] } }
+      : { type: "response.create" };
   }
 
   private hasUncommittedAudio(): boolean {

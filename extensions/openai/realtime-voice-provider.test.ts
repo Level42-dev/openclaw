@@ -94,6 +94,9 @@ type SentRealtimeEvent = {
   item_id?: string;
   content_index?: number;
   audio_end_ms?: number;
+  response?: {
+    output_modalities?: string[];
+  };
   session?: {
     type?: string;
     model?: string;
@@ -252,6 +255,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
       onAudio: vi.fn(),
       onClearAudio: vi.fn(),
+      responseOutputModalities: ["audio"],
     });
 
     expect(bridge.supportsToolResultContinuation).toBe(true);
@@ -1382,6 +1386,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
       onAudio: vi.fn(),
       onClearAudio: vi.fn(),
+      responseOutputModalities: ["audio"],
     });
     const connecting = bridge.connect();
     const socket = FakeWebSocket.instances[0];
@@ -1413,7 +1418,9 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
 
     socket.emit("message", Buffer.from(JSON.stringify({ type: "response.done" })));
 
-    expect(parseSent(socket).slice(-1)).toEqual([{ type: "response.create" }]);
+    expect(parseSent(socket).slice(-1)).toEqual([
+      { type: "response.create", response: { output_modalities: ["audio"] } },
+    ]);
   });
 
   it("defers audio commits while a realtime response is active", async () => {
@@ -1422,6 +1429,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
       onAudio: vi.fn(),
       onClearAudio: vi.fn(),
+      responseOutputModalities: ["audio"],
     });
     const connecting = bridge.connect();
     const socket = FakeWebSocket.instances[0];
@@ -1452,7 +1460,35 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
 
     expect(parseSent(socket).slice(-2)).toEqual([
       { type: "input_audio_buffer.commit" },
-      { type: "response.create" },
+      { type: "response.create", response: { output_modalities: ["audio"] } },
+    ]);
+  });
+
+  it("requests audio output for manual audio commits when configured", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+      responseOutputModalities: ["audio"],
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+
+    bridge.sendAudio(Buffer.from("audio-in"));
+    bridge.commitAudio?.();
+
+    expect(parseSent(socket).slice(-2)).toEqual([
+      { type: "input_audio_buffer.commit" },
+      { type: "response.create", response: { output_modalities: ["audio"] } },
     ]);
   });
 
@@ -1462,6 +1498,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
       onAudio: vi.fn(),
       onClearAudio: vi.fn(),
+      responseOutputModalities: ["audio"],
     });
     const connecting = bridge.connect();
     const socket = FakeWebSocket.instances[0];
@@ -1486,6 +1523,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
       onAudio: vi.fn(),
       onClearAudio: vi.fn(),
+      responseOutputModalities: ["audio"],
     });
     const connecting = bridge.connect();
     const socket = FakeWebSocket.instances[0];
@@ -1523,7 +1561,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
           output: JSON.stringify({ text: "done" }),
         },
       },
-      { type: "response.create" },
+      { type: "response.create", response: { output_modalities: ["audio"] } },
     ]);
     socket.emit(
       "message",
@@ -1575,6 +1613,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
       onAudio: vi.fn(),
       onClearAudio: vi.fn(),
       onError,
+      responseOutputModalities: ["audio"],
     });
     const connecting = bridge.connect();
     const socket = FakeWebSocket.instances[0];
@@ -1615,7 +1654,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
           output: JSON.stringify({ text: "done" }),
         },
       },
-      { type: "response.create" },
+      { type: "response.create", response: { output_modalities: ["audio"] } },
     ]);
   });
 

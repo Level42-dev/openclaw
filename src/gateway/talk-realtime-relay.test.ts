@@ -233,6 +233,7 @@ describe("talk realtime gateway relay", () => {
       instructions: "be brief",
       autoRespondToAudio: false,
       interruptResponseOnInputAudio: false,
+      responseOutputModalities: ["audio"],
     });
 
     const readyPayload = findEventPayload(events, (payload) => payload.type === "ready");

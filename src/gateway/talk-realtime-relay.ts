@@ -194,6 +194,7 @@ export function createTalkRealtimeRelaySession(
     instructions: params.instructions,
     autoRespondToAudio: false,
     interruptResponseOnInputAudio: false,
+    responseOutputModalities: ["audio"],
     tools: params.tools,
     markStrategy: "ack-immediately",
     audioSink: {

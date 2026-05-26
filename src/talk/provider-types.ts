@@ -106,6 +106,7 @@ export type RealtimeVoiceBridgeCreateRequest = RealtimeVoiceBridgeCallbacks & {
   instructions?: string;
   autoRespondToAudio?: boolean;
   interruptResponseOnInputAudio?: boolean;
+  responseOutputModalities?: Array<"audio" | "text">;
   tools?: RealtimeVoiceTool[];
 };
 
