@@ -120,6 +120,7 @@ export type RealtimeVoiceBridgeCreateRequest = RealtimeVoiceBridgeCallbacks & {
   autoRespondToAudio?: boolean;
   interruptResponseOnInputAudio?: boolean;
   minAudioCommitDurationMs?: number;
+  requestResponseOnAudioCommit?: boolean;
   responseOutputModalities?: Array<"audio" | "text">;
   tools?: RealtimeVoiceTool[];
 };

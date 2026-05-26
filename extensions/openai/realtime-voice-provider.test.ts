@@ -1503,6 +1503,39 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     ]);
   });
 
+  it("can commit manual audio without requesting a direct audio response", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+      requestResponseOnAudioCommit: false,
+      responseOutputModalities: ["audio"],
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+
+    bridge.sendAudio(Buffer.from("audio-in"));
+    bridge.commitAudio?.();
+
+    expect(parseSent(socket).slice(-2)).toEqual([
+      {
+        type: "input_audio_buffer.append",
+        audio: Buffer.from("audio-in").toString("base64"),
+      },
+      { type: "input_audio_buffer.commit" },
+    ]);
+    expect(hasSentEventType(socket, "response.create")).toBe(false);
+  });
+
   it("skips empty audio commits", async () => {
     const provider = buildOpenAIRealtimeVoiceProvider();
     const onEvent = vi.fn();

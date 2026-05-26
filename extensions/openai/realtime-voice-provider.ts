@@ -448,7 +448,9 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     this.audioCommitPending = false;
     this.sendEvent({ type: "input_audio_buffer.commit" });
     this.uncommittedAudioBytes = 0;
-    this.requestResponseCreate();
+    if (this.config.requestResponseOnAudioCommit !== false) {
+      this.requestResponseCreate();
+    }
     return { status: "committed", byteLength };
   }
 
