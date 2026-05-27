@@ -61,6 +61,7 @@ type OpenAIRealtimeVoiceProviderConfig = {
   vadThreshold?: number;
   silenceDurationMs?: number;
   prefixPaddingMs?: number;
+  inputAudioTurnDetection?: "server_vad" | "disabled";
   interruptResponseOnInputAudio?: boolean;
   minBargeInAudioEndMs?: number;
   minAudioCommitDurationMs?: number;
@@ -160,7 +161,7 @@ type RealtimeGaSessionUpdate = {
     audio: {
       input: {
         format: OpenAIRealtimeAudioFormatConfig;
-        turn_detection: RealtimeTurnDetectionConfig;
+        turn_detection: RealtimeTurnDetectionConfig | null;
         noise_reduction?: { type: "near_field" } | null;
         transcription?: { model: string };
       };
@@ -184,7 +185,7 @@ type RealtimeAzureDeploymentSessionUpdate = {
     input_audio_format: "g711_ulaw" | "pcm16";
     output_audio_format: "g711_ulaw" | "pcm16";
     input_audio_transcription?: { model: string };
-    turn_detection: RealtimeTurnDetectionConfig;
+    turn_detection: RealtimeTurnDetectionConfig | null;
     temperature: number;
     tools?: RealtimeVoiceTool[];
     tool_choice?: string;
@@ -817,6 +818,17 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     const cfg = this.config;
     const autoRespondToAudio = cfg.autoRespondToAudio ?? true;
     const interruptResponseOnInputAudio = cfg.interruptResponseOnInputAudio ?? autoRespondToAudio;
+    const turnDetection =
+      cfg.inputAudioTurnDetection === "disabled"
+        ? null
+        : {
+            type: "server_vad" as const,
+            threshold: cfg.vadThreshold ?? 0.5,
+            prefix_padding_ms: cfg.prefixPaddingMs ?? 300,
+            silence_duration_ms: cfg.silenceDurationMs ?? 500,
+            create_response: autoRespondToAudio,
+            interrupt_response: interruptResponseOnInputAudio,
+          };
     return {
       type: "session.update",
       session: {
@@ -829,14 +841,7 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
             format: this.resolveRealtimeAudioFormat(),
             noise_reduction: null,
             transcription: { model: OPENAI_REALTIME_INPUT_TRANSCRIPTION_MODEL },
-            turn_detection: {
-              type: "server_vad",
-              threshold: cfg.vadThreshold ?? 0.5,
-              prefix_padding_ms: cfg.prefixPaddingMs ?? 300,
-              silence_duration_ms: cfg.silenceDurationMs ?? 500,
-              create_response: autoRespondToAudio,
-              interrupt_response: interruptResponseOnInputAudio,
-            },
+            turn_detection: turnDetection,
           },
           output: {
             format: this.resolveRealtimeAudioFormat(),
@@ -861,6 +866,17 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
   private buildAzureDeploymentSessionUpdate(): RealtimeAzureDeploymentSessionUpdate {
     const cfg = this.config;
     const format = this.resolveLegacyRealtimeAudioFormat();
+    const turnDetection =
+      cfg.inputAudioTurnDetection === "disabled"
+        ? null
+        : {
+            type: "server_vad" as const,
+            threshold: cfg.vadThreshold ?? 0.5,
+            prefix_padding_ms: cfg.prefixPaddingMs ?? 300,
+            silence_duration_ms: cfg.silenceDurationMs ?? 500,
+            create_response: cfg.autoRespondToAudio ?? true,
+            interrupt_response: cfg.interruptResponseOnInputAudio ?? cfg.autoRespondToAudio ?? true,
+          };
     return {
       type: "session.update",
       session: {
@@ -870,13 +886,7 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
         input_audio_format: format,
         output_audio_format: format,
         input_audio_transcription: { model: "whisper-1" },
-        turn_detection: {
-          type: "server_vad",
-          threshold: cfg.vadThreshold ?? 0.5,
-          prefix_padding_ms: cfg.prefixPaddingMs ?? 300,
-          silence_duration_ms: cfg.silenceDurationMs ?? 500,
-          create_response: cfg.autoRespondToAudio ?? true,
-        },
+        turn_detection: turnDetection,
         temperature: cfg.temperature ?? 0.8,
         ...(cfg.tools && cfg.tools.length > 0
           ? {

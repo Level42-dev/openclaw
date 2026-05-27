@@ -46,6 +46,7 @@ export type RealtimeVoiceBridgeSessionParams = {
   instructions?: string;
   initialGreetingInstructions?: string;
   autoRespondToAudio?: boolean;
+  inputAudioTurnDetection?: "server_vad" | "disabled";
   interruptResponseOnInputAudio?: boolean;
   minAudioCommitDurationMs?: number;
   requestResponseOnAudioCommit?: boolean;
@@ -94,6 +95,7 @@ export function createRealtimeVoiceBridgeSession(
     audioFormat: params.audioFormat,
     instructions: params.instructions,
     autoRespondToAudio: params.autoRespondToAudio,
+    inputAudioTurnDetection: params.inputAudioTurnDetection,
     interruptResponseOnInputAudio: params.interruptResponseOnInputAudio,
     minAudioCommitDurationMs: params.minAudioCommitDurationMs,
     requestResponseOnAudioCommit: params.requestResponseOnAudioCommit,

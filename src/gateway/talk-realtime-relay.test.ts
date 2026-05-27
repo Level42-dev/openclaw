@@ -232,6 +232,7 @@ describe("talk realtime gateway relay", () => {
       audioFormat: { encoding: "pcm16", sampleRateHz: 24000, channels: 1 },
       instructions: "be brief",
       autoRespondToAudio: false,
+      inputAudioTurnDetection: "disabled",
       interruptResponseOnInputAudio: false,
       minAudioCommitDurationMs: 100,
       requestResponseOnAudioCommit: false,

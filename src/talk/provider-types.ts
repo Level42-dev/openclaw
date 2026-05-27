@@ -118,6 +118,7 @@ export type RealtimeVoiceBridgeCreateRequest = RealtimeVoiceBridgeCallbacks & {
   audioFormat?: RealtimeVoiceAudioFormat;
   instructions?: string;
   autoRespondToAudio?: boolean;
+  inputAudioTurnDetection?: "server_vad" | "disabled";
   interruptResponseOnInputAudio?: boolean;
   minAudioCommitDurationMs?: number;
   requestResponseOnAudioCommit?: boolean;

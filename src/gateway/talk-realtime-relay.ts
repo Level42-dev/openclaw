@@ -205,6 +205,7 @@ export function createTalkRealtimeRelaySession(
     audioFormat: REALTIME_VOICE_AUDIO_FORMAT_PCM16_24KHZ,
     instructions: params.instructions,
     autoRespondToAudio: false,
+    inputAudioTurnDetection: "disabled",
     interruptResponseOnInputAudio: false,
     minAudioCommitDurationMs: MIN_RELAY_AUDIO_COMMIT_DURATION_MS,
     requestResponseOnAudioCommit: false,
