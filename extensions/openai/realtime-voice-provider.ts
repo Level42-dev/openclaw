@@ -346,6 +346,18 @@ function base64ToBuffer(b64: string): Buffer {
   return Buffer.from(b64, "base64");
 }
 
+function pcm16PeakPermille(audio: Buffer): number {
+  let peak = 0;
+  for (let offset = 0; offset + 1 < audio.length; offset += 2) {
+    const sample = audio.readInt16LE(offset);
+    const abs = sample === -32768 ? 32767 : Math.abs(sample);
+    if (abs > peak) {
+      peak = abs;
+    }
+  }
+  return Math.floor((peak * 1000) / 32767);
+}
+
 class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
   private static readonly DEFAULT_MODEL = OPENAI_REALTIME_DEFAULT_MODEL;
   private static readonly MAX_RECONNECT_ATTEMPTS = 5;
@@ -946,7 +958,7 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
         this.config.onEvent?.({
           direction: "server",
           type: `${event.type}.bytes`,
-          detail: `byteLength=${audio.byteLength}`,
+          detail: this.describeAudioBytes(audio),
         });
         this.config.onAudio(audio);
         if (event.item_id && event.item_id !== this.lastAssistantItemId) {
@@ -1303,6 +1315,14 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
   }): string {
     const modalities = event.response?.output_modalities;
     return `outputModalities=${modalities && modalities.length > 0 ? modalities.join(",") : "default"}`;
+  }
+
+  private describeAudioBytes(audio: Buffer): string {
+    const parts = [`byteLength=${audio.byteLength}`];
+    if (this.audioFormat.encoding === "pcm16") {
+      parts.push(`peakPermille=${pcm16PeakPermille(audio)}`);
+    }
+    return parts.join(" ");
   }
 
   private describeServerEvent(event: RealtimeEvent): string | undefined {
