@@ -560,6 +560,16 @@ describe("talk realtime gateway relay", () => {
       type: "input_audio_buffer.commit",
       detail: "byteLength=4800 requestResponse=0",
     });
+    bridgeRequest?.onEvent?.({
+      direction: "server",
+      type: "conversation.item.input_audio_transcription.completed",
+      detail: "status=empty transcript=empty",
+    });
+    bridgeRequest?.onEvent?.({
+      direction: "server",
+      type: "conversation.item.input_audio_transcription.failed",
+      detail: "status=failed errorType=server_error errorCode=transcription_failed",
+    });
 
     const markerPayload = findEventPayload(events, (payload) => payload.type === "marker");
     expectRecordFields(markerPayload, {
@@ -589,6 +599,38 @@ describe("talk realtime gateway relay", () => {
         direction: "client",
         eventType: "input_audio_buffer.commit",
         detail: "byteLength=4800 requestResponse=0",
+      },
+    });
+    const emptyTranscriptMarkerPayload = findEventPayload(
+      events,
+      (payload) =>
+        payload.type === "marker" &&
+        (payload.talkEvent as { payload?: { eventType?: string } } | undefined)?.payload
+          ?.eventType === "conversation.item.input_audio_transcription.completed",
+    );
+    expectRecordFields(emptyTranscriptMarkerPayload.talkEvent, {
+      type: "usage.metrics",
+      payload: {
+        marker: "realtime.bridge.event",
+        direction: "server",
+        eventType: "conversation.item.input_audio_transcription.completed",
+        detail: "status=empty transcript=empty",
+      },
+    });
+    const failedTranscriptMarkerPayload = findEventPayload(
+      events,
+      (payload) =>
+        payload.type === "marker" &&
+        (payload.talkEvent as { payload?: { eventType?: string } } | undefined)?.payload
+          ?.eventType === "conversation.item.input_audio_transcription.failed",
+    );
+    expectRecordFields(failedTranscriptMarkerPayload.talkEvent, {
+      type: "usage.metrics",
+      payload: {
+        marker: "realtime.bridge.event",
+        direction: "server",
+        eventType: "conversation.item.input_audio_transcription.failed",
+        detail: "status=failed errorType=server_error errorCode=transcription_failed",
       },
     });
   });

@@ -1181,6 +1181,87 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     );
   });
 
+  it("describes input audio transcription lifecycle without logging transcript text", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const onEvent = vi.fn();
+    const onTranscript = vi.fn();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+      onEvent,
+      onTranscript,
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+
+    socket.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          type: "conversation.item.input_audio_transcription.completed",
+          item_id: "item_1",
+          transcript: "private transcript text",
+        }),
+      ),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          type: "conversation.item.input_audio_transcription.completed",
+          item_id: "item_2",
+          transcript: "",
+        }),
+      ),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          type: "conversation.item.input_audio_transcription.failed",
+          item_id: "item_3",
+          error: {
+            type: "server_error",
+            code: "transcription_failed",
+            message: "provider failure details",
+            param: "audio",
+          },
+        }),
+      ),
+    );
+
+    expect(onTranscript).toHaveBeenCalledWith("user", "private transcript text", true);
+    expect(onTranscript).toHaveBeenCalledTimes(1);
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "server",
+      type: "conversation.item.input_audio_transcription.completed",
+      detail: "status=completed transcript=present",
+    });
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "server",
+      type: "conversation.item.input_audio_transcription.completed",
+      detail: "status=empty transcript=empty",
+    });
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "server",
+      type: "conversation.item.input_audio_transcription.failed",
+      detail: "status=failed errorType=server_error errorCode=transcription_failed param=present",
+    });
+    const serializedEventCalls = JSON.stringify(onEvent.mock.calls);
+    expect(serializedEventCalls).not.toContain("private transcript text");
+    expect(serializedEventCalls).not.toContain("provider failure details");
+    expect(hasSentEventType(socket, "response.create")).toBe(false);
+  });
+
   it("forwards Codex-compatible legacy realtime audio and transcript events", async () => {
     const provider = buildOpenAIRealtimeVoiceProvider();
     const onAudio = vi.fn();
