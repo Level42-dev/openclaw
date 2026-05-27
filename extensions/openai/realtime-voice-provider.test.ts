@@ -1130,6 +1130,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     const onTranscript = vi.fn();
     const bridge = provider.createBridge({
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      audioFormat: REALTIME_VOICE_AUDIO_FORMAT_PCM16_24KHZ,
       onAudio,
       onClearAudio: vi.fn(),
       onEvent,
@@ -1146,7 +1147,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
     await connecting;
 
-    const audio = Buffer.from("assistant audio");
+    const audio = Buffer.from([0, 0, 0, 64, 0, 128]);
     socket.emit(
       "message",
       Buffer.from(
@@ -1171,7 +1172,7 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     expect(onEvent).toHaveBeenCalledWith({
       direction: "server",
       type: "response.output_audio.delta.bytes",
-      detail: `byteLength=${audio.byteLength}`,
+      detail: `byteLength=${audio.byteLength} peakPermille=1000`,
     });
     expect(onTranscript).toHaveBeenCalledWith(
       "assistant",

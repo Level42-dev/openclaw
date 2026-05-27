@@ -175,6 +175,18 @@ function shouldRecordRelayBridgeEvent(type: string): boolean {
   );
 }
 
+function pcm16PeakPermille(audio: Buffer): number {
+  let peak = 0;
+  for (let offset = 0; offset + 1 < audio.length; offset += 2) {
+    const sample = audio.readInt16LE(offset);
+    const abs = sample === -32768 ? 32767 : Math.abs(sample);
+    if (abs > peak) {
+      peak = abs;
+    }
+  }
+  return Math.floor((peak * 1000) / 32767);
+}
+
 export function createTalkRealtimeRelaySession(
   params: CreateTalkRealtimeRelaySessionParams,
 ): TalkRealtimeRelaySessionResult {
@@ -216,6 +228,7 @@ export function createTalkRealtimeRelaySession(
       isOpen: () => Boolean(relay && relaySessions.has(relay.id)),
       sendAudio: (audio) => {
         const turnId = relay ? ensureRelayTurn(relay) : undefined;
+        const peakPermille = pcm16PeakPermille(audio);
         emit(
           {
             relaySessionId,
@@ -225,7 +238,7 @@ export function createTalkRealtimeRelaySession(
           {
             type: "output.audio.delta",
             turnId,
-            payload: { byteLength: audio.length },
+            payload: { byteLength: audio.length, peakPermille },
           },
         );
       },
