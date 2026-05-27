@@ -169,6 +169,8 @@ function shouldRecordRelayBridgeEvent(type: string): boolean {
   return (
     type === "input_audio_buffer.commit" ||
     type === "input_audio_buffer.commit.deferred" ||
+    type === "conversation.item.input_audio_transcription.completed" ||
+    type === "conversation.item.input_audio_transcription.failed" ||
     type === "response.create" ||
     type === "response.created" ||
     type === "input_audio_buffer.commit.skipped" ||

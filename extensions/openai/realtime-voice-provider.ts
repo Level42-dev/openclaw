@@ -233,6 +233,14 @@ function asNonNegativeInteger(value: unknown): number | undefined {
   return number === undefined || number < 0 ? undefined : Math.floor(number);
 }
 
+function readRealtimeErrorStringField(error: unknown, key: string): string | undefined {
+  if (!error || typeof error !== "object" || Array.isArray(error)) {
+    return undefined;
+  }
+  const value = (error as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 type OpenAIRealtimeApiKeyResolution =
   | { status: "available"; value: string }
   | { status: "missing" };
@@ -1367,6 +1375,24 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
   private describeServerEvent(event: RealtimeEvent): string | undefined {
     if (event.type === "error") {
       return readRealtimeErrorDetail(event.error);
+    }
+    if (event.type === "conversation.item.input_audio_transcription.completed") {
+      return event.transcript && event.transcript.trim()
+        ? "status=completed transcript=present"
+        : "status=empty transcript=empty";
+    }
+    if (event.type === "conversation.item.input_audio_transcription.failed") {
+      const errorType = readRealtimeErrorStringField(event.error, "type");
+      const errorCode = readRealtimeErrorStringField(event.error, "code");
+      const errorParam = readRealtimeErrorStringField(event.error, "param");
+      return [
+        "status=failed",
+        errorType ? `errorType=${errorType}` : undefined,
+        errorCode ? `errorCode=${errorCode}` : undefined,
+        errorParam ? "param=present" : undefined,
+      ]
+        .filter(Boolean)
+        .join(" ");
     }
     if (event.type === "response.done") {
       const status = event.response?.status;
