@@ -1461,10 +1461,12 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
 
   it("defers audio commits while a realtime response is active", async () => {
     const provider = buildOpenAIRealtimeVoiceProvider();
+    const onEvent = vi.fn();
     const bridge = provider.createBridge({
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
       onAudio: vi.fn(),
       onClearAudio: vi.fn(),
+      onEvent,
       responseOutputModalities: ["audio"],
     });
     const connecting = bridge.connect();
@@ -1484,6 +1486,11 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
 
     bridge.sendAudio(Buffer.from("audio-in"));
     bridge.commitAudio?.();
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "client",
+      type: "input_audio_buffer.commit.deferred",
+      detail: "reason=response_active byteLength=8 requestResponse=1",
+    });
 
     expect(parseSent(socket).slice(-1)).toEqual([
       {
@@ -1493,6 +1500,11 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     ]);
 
     socket.emit("message", Buffer.from(JSON.stringify({ type: "response.done" })));
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "client",
+      type: "input_audio_buffer.commit",
+      detail: "byteLength=8 requestResponse=1",
+    });
 
     expect(parseSent(socket).slice(-2)).toEqual([
       { type: "input_audio_buffer.commit" },
@@ -1502,10 +1514,12 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
 
   it("requests audio output for manual audio commits when configured", async () => {
     const provider = buildOpenAIRealtimeVoiceProvider();
+    const onEvent = vi.fn();
     const bridge = provider.createBridge({
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
       onAudio: vi.fn(),
       onClearAudio: vi.fn(),
+      onEvent,
       responseOutputModalities: ["audio"],
     });
     const connecting = bridge.connect();
@@ -1522,6 +1536,11 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     bridge.sendAudio(Buffer.from("audio-in"));
     bridge.commitAudio?.();
 
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "client",
+      type: "input_audio_buffer.commit",
+      detail: "byteLength=8 requestResponse=1",
+    });
     expect(parseSent(socket).slice(-2)).toEqual([
       { type: "input_audio_buffer.commit" },
       { type: "response.create", response: { output_modalities: ["audio"] } },
@@ -1530,10 +1549,12 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
 
   it("can commit manual audio without requesting a direct audio response", async () => {
     const provider = buildOpenAIRealtimeVoiceProvider();
+    const onEvent = vi.fn();
     const bridge = provider.createBridge({
       providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
       onAudio: vi.fn(),
       onClearAudio: vi.fn(),
+      onEvent,
       requestResponseOnAudioCommit: false,
       responseOutputModalities: ["audio"],
     });
@@ -1551,6 +1572,11 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     bridge.sendAudio(Buffer.from("audio-in"));
     bridge.commitAudio?.();
 
+    expect(onEvent).toHaveBeenCalledWith({
+      direction: "client",
+      type: "input_audio_buffer.commit",
+      detail: "byteLength=8 requestResponse=0",
+    });
     expect(parseSent(socket).slice(-2)).toEqual([
       {
         type: "input_audio_buffer.append",
