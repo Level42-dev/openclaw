@@ -456,10 +456,15 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     }
     if (!this.canCommitAudioNow()) {
       this.audioCommitPending = true;
+      this.config.onEvent?.({
+        direction: "client",
+        type: "input_audio_buffer.commit.deferred",
+        detail: this.formatCommitDeferredDetail(byteLength),
+      });
       return { status: "committed", byteLength };
     }
     this.audioCommitPending = false;
-    this.sendEvent({ type: "input_audio_buffer.commit" });
+    this.sendEvent({ type: "input_audio_buffer.commit" }, this.formatCommitDetail(byteLength));
     this.uncommittedAudioBytes = 0;
     if (this.config.requestResponseOnAudioCommit !== false) {
       this.requestResponseCreate();
@@ -1238,6 +1243,40 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
       `minByteLength=${result.minByteLength}`,
       `minDurationMs=${result.minDurationMs}`,
     ].join(" ");
+  }
+
+  private formatCommitDetail(byteLength: number): string {
+    return [
+      `byteLength=${byteLength}`,
+      `requestResponse=${this.config.requestResponseOnAudioCommit !== false ? 1 : 0}`,
+    ].join(" ");
+  }
+
+  private formatCommitDeferredDetail(byteLength: number): string {
+    return [
+      `reason=${this.commitBlockedReason()}`,
+      `byteLength=${byteLength}`,
+      `requestResponse=${this.config.requestResponseOnAudioCommit !== false ? 1 : 0}`,
+    ].join(" ");
+  }
+
+  private commitBlockedReason(): string {
+    if (!this.connected || this.ws?.readyState !== WebSocket.OPEN) {
+      return "not_connected";
+    }
+    if (!this.sessionConfigured) {
+      return "session_not_configured";
+    }
+    if (this.responseActive) {
+      return "response_active";
+    }
+    if (this.responseCreateInFlight) {
+      return "response_create_in_flight";
+    }
+    if (this.responseCancelInFlight) {
+      return "response_cancel_in_flight";
+    }
+    return "unknown";
   }
 
   private canCommitAudioNow(): boolean {

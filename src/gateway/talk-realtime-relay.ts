@@ -167,6 +167,8 @@ function enforceRelaySessionLimits(connId: string): void {
 
 function shouldRecordRelayBridgeEvent(type: string): boolean {
   return (
+    type === "input_audio_buffer.commit" ||
+    type === "input_audio_buffer.commit.deferred" ||
     type === "response.create" ||
     type === "response.created" ||
     type === "input_audio_buffer.commit.skipped" ||

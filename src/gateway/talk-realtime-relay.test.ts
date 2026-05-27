@@ -555,6 +555,11 @@ describe("talk realtime gateway relay", () => {
       type: "response.output_audio.delta.bytes",
       detail: "byteLength=640",
     });
+    bridgeRequest?.onEvent?.({
+      direction: "client",
+      type: "input_audio_buffer.commit",
+      detail: "byteLength=4800 requestResponse=0",
+    });
 
     const markerPayload = findEventPayload(events, (payload) => payload.type === "marker");
     expectRecordFields(markerPayload, {
@@ -568,6 +573,22 @@ describe("talk realtime gateway relay", () => {
         direction: "server",
         eventType: "response.output_audio.delta.bytes",
         detail: "byteLength=640",
+      },
+    });
+    const commitMarkerPayload = findEventPayload(
+      events,
+      (payload) =>
+        payload.type === "marker" &&
+        (payload.talkEvent as { payload?: { eventType?: string } } | undefined)?.payload
+          ?.eventType === "input_audio_buffer.commit",
+    );
+    expectRecordFields(commitMarkerPayload.talkEvent, {
+      type: "usage.metrics",
+      payload: {
+        marker: "realtime.bridge.event",
+        direction: "client",
+        eventType: "input_audio_buffer.commit",
+        detail: "byteLength=4800 requestResponse=0",
       },
     });
   });
