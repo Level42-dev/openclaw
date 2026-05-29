@@ -235,7 +235,7 @@ describe("talk realtime gateway relay", () => {
       inputAudioTurnDetection: "disabled",
       interruptResponseOnInputAudio: false,
       minAudioCommitDurationMs: 100,
-      requestResponseOnAudioCommit: false,
+      requestResponseOnAudioCommit: true,
       responseOutputModalities: ["audio"],
     });
 
@@ -352,7 +352,7 @@ describe("talk realtime gateway relay", () => {
 
     expect(bridge.sendAudio).toHaveBeenCalledWith(Buffer.from("audio-in"));
     expect(bridge.commitAudio).toHaveBeenCalled();
-    expect(bridge.sendUserMessage).toHaveBeenCalledWith("hello");
+    expect(bridge.sendUserMessage).not.toHaveBeenCalled();
     expect(bridge.setMediaTimestamp).toHaveBeenCalledWith(123);
     expect(bridge.submitToolResult).toHaveBeenNthCalledWith(
       1,
@@ -570,6 +570,11 @@ describe("talk realtime gateway relay", () => {
       type: "conversation.item.input_audio_transcription.failed",
       detail: "status=failed errorType=server_error errorCode=transcription_failed",
     });
+    bridgeRequest?.onEvent?.({
+      direction: "server",
+      type: "response.done",
+      detail: "status=completed",
+    });
 
     const markerPayload = findEventPayload(events, (payload) => payload.type === "marker");
     expectRecordFields(markerPayload, {
@@ -631,6 +636,22 @@ describe("talk realtime gateway relay", () => {
         direction: "server",
         eventType: "conversation.item.input_audio_transcription.failed",
         detail: "status=failed errorType=server_error errorCode=transcription_failed",
+      },
+    });
+    const responseDoneMarkerPayload = findEventPayload(
+      events,
+      (payload) =>
+        payload.type === "marker" &&
+        (payload.talkEvent as { payload?: { eventType?: string } } | undefined)?.payload
+          ?.eventType === "response.done",
+    );
+    expectRecordFields(responseDoneMarkerPayload.talkEvent, {
+      type: "usage.metrics",
+      payload: {
+        marker: "realtime.bridge.event",
+        direction: "server",
+        eventType: "response.done",
+        detail: "status=completed",
       },
     });
   });
