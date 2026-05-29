@@ -9,7 +9,10 @@ import {
   type RealtimeVoiceTool,
   type RealtimeVoiceToolResultOptions,
 } from "../talk/provider-types.js";
-import { createRealtimeVoiceBridgeSession } from "../talk/session-runtime.js";
+import {
+  createRealtimeVoiceBridgeSession,
+  type RealtimeVoiceBridgeSession,
+} from "../talk/session-runtime.js";
 import {
   type TalkEvent,
   type TalkEventInput,
