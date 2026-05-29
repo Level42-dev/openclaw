@@ -9,10 +9,7 @@ import {
   type RealtimeVoiceTool,
   type RealtimeVoiceToolResultOptions,
 } from "../talk/provider-types.js";
-import {
-  createRealtimeVoiceBridgeSession,
-  type RealtimeVoiceBridgeSession,
-} from "../talk/session-runtime.js";
+import { createRealtimeVoiceBridgeSession } from "../talk/session-runtime.js";
 import {
   type TalkEvent,
   type TalkEventInput,
@@ -173,6 +170,8 @@ function shouldRecordRelayBridgeEvent(type: string): boolean {
     type === "conversation.item.input_audio_transcription.failed" ||
     type === "response.create" ||
     type === "response.created" ||
+    type === "response.done" ||
+    type === "response.cancelled" ||
     type === "input_audio_buffer.commit.skipped" ||
     type.endsWith(".output_audio.delta.bytes") ||
     type.endsWith(".audio.delta.bytes")
@@ -208,7 +207,6 @@ export function createTalkRealtimeRelaySession(
     { onEvent: recordTalkObservabilityEvent },
   );
   let relay: RelaySession | undefined;
-  let bridgeSession: RealtimeVoiceBridgeSession | undefined;
   const emit = (event: TalkRealtimeRelayEventPayload, talkEvent?: TalkEventInput) =>
     broadcastToOwner(params.context, params.connId, {
       ...event,
@@ -224,7 +222,7 @@ export function createTalkRealtimeRelaySession(
     inputAudioTurnDetection: "disabled",
     interruptResponseOnInputAudio: false,
     minAudioCommitDurationMs: MIN_RELAY_AUDIO_COMMIT_DURATION_MS,
-    requestResponseOnAudioCommit: false,
+    requestResponseOnAudioCommit: true,
     responseOutputModalities: ["audio"],
     tools: params.tools,
     markStrategy: "ack-immediately",
@@ -291,9 +289,6 @@ export function createTalkRealtimeRelaySession(
           final,
         },
       );
-      if (role === "user" && final && text.trim()) {
-        bridgeSession?.sendUserMessage(text.trim());
-      }
     },
     onToolCall: (toolCall) => {
       const turnId = relay ? ensureRelayTurn(relay) : undefined;
@@ -357,7 +352,6 @@ export function createTalkRealtimeRelaySession(
       );
     },
   });
-  bridgeSession = bridge;
   relay = {
     id: relaySessionId,
     connId: params.connId,
