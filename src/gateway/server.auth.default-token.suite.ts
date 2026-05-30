@@ -265,6 +265,41 @@ export function registerDefaultAuthTokenSuite(): void {
       }
     });
 
+    test("hello-ok stays compact for constrained Voice PE node clients", async () => {
+      const ws = await openWs(port);
+      try {
+        const res = await connectReq(ws, {
+          client: {
+            id: GATEWAY_CLIENT_NAMES.NODE_HOST,
+            version: "0.1.0",
+            platform: "esp32-s3",
+            deviceFamily: "voice-pe",
+            mode: GATEWAY_CLIENT_MODES.NODE,
+          },
+          role: "operator",
+          scopes: ["operator.write"],
+        });
+        expect(res.ok).toBe(true);
+        const helloOk = res.payload as
+          | {
+              auth?: { scopes?: unknown };
+              features?: { methods?: unknown; events?: unknown };
+              snapshot?: { presence?: unknown; sessionDefaults?: unknown };
+            }
+          | undefined;
+        expect(helloOk?.auth?.scopes).toEqual(expect.arrayContaining(["operator.write"]));
+        expect(helloOk?.snapshot?.presence).toEqual([]);
+        expect(helloOk?.snapshot?.sessionDefaults).toBeUndefined();
+        expect(helloOk?.features?.methods).toEqual(
+          expect.arrayContaining(["talk.session.close", "health"]),
+        );
+        expect(helloOk?.features?.methods).not.toContain("web.login.start");
+        expect(JSON.stringify(res).length).toBeLessThan(4_096);
+      } finally {
+        ws.close();
+      }
+    });
+
     test("hello-ok reports persisted token scopes when reusing an existing device token", async () => {
       const { randomUUID } = await import("node:crypto");
       const os = await import("node:os");

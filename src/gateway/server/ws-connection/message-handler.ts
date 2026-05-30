@@ -127,6 +127,7 @@ import {
   buildGatewaySnapshot,
   getHealthCache,
   getHealthVersion,
+  getPresenceVersion,
   incrementPresenceVersion,
 } from "../health-state.js";
 import { resolveSharedGatewaySessionGeneration } from "../ws-shared-generation.js";
@@ -153,6 +154,33 @@ import { isUnauthorizedRoleError, UnauthorizedFloodGuard } from "./unauthorized-
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
 const DEVICE_SIGNATURE_SKEW_MS = 2 * 60 * 1000;
+const CONSTRAINED_NODE_HELLO_METHODS = [
+  "talk.realtime.session",
+  "talk.realtime.relayAudio",
+  "talk.realtime.relayCommit",
+  "talk.session.close",
+  "nodes.list",
+  "health",
+] as const;
+const CONSTRAINED_NODE_HELLO_EVENTS = [
+  "connect.challenge",
+  "talk.realtime.relay",
+  "node.invoke.request",
+] as const;
+
+function isConstrainedNativeNodeConnect(connectParams: ConnectParams): boolean {
+  return (
+    connectParams.client.id === GATEWAY_CLIENT_IDS.NODE_HOST &&
+    connectParams.client.mode === GATEWAY_CLIENT_MODES.NODE &&
+    connectParams.client.platform === "esp32-s3" &&
+    connectParams.client.deviceFamily === "voice-pe"
+  );
+}
+
+function filterAdvertisedNames(available: readonly string[], wanted: readonly string[]): string[] {
+  const availableSet = new Set(available);
+  return wanted.filter((name) => availableSet.has(name));
+}
 
 function sameBootstrapProfile(
   left: DeviceBootstrapProfile,
@@ -1698,11 +1726,19 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
             );
         }
 
-        const snapshot = buildGatewaySnapshot({
-          includeSensitive: scopes.includes(ADMIN_SCOPE),
-        });
+        const constrainedNodeHello = isConstrainedNativeNodeConnect(connectParams);
+        const snapshot = constrainedNodeHello
+          ? {
+              presence: [],
+              health: {},
+              stateVersion: { presence: getPresenceVersion(), health: getHealthVersion() },
+              uptimeMs: Math.round(process.uptime() * 1000),
+            }
+          : buildGatewaySnapshot({
+              includeSensitive: scopes.includes(ADMIN_SCOPE),
+            });
         const cachedHealth = getHealthCache();
-        if (cachedHealth) {
+        if (!constrainedNodeHello && cachedHealth) {
           snapshot.health = cachedHealth;
           snapshot.stateVersion.health = getHealthVersion();
         }
@@ -1714,7 +1750,12 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
             version: resolveRuntimeServiceVersion(process.env),
             connId,
           },
-          features: { methods: gatewayMethods, events },
+          features: constrainedNodeHello
+            ? {
+                methods: filterAdvertisedNames(gatewayMethods, CONSTRAINED_NODE_HELLO_METHODS),
+                events: filterAdvertisedNames(events, CONSTRAINED_NODE_HELLO_EVENTS),
+              }
+            : { methods: gatewayMethods, events },
           snapshot,
           ...(Object.keys(pluginSurfaceUrls).length > 0 ? { pluginSurfaceUrls } : {}),
           auth: {
