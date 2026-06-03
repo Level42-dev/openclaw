@@ -1195,7 +1195,7 @@ describe("talk realtime gateway relay", () => {
     ).toThrow("Unknown realtime relay session");
   });
 
-  it("does not commit provider input when server VAD owns the relay turn", async () => {
+  it("commits provider input when server VAD has not committed the relay turn", async () => {
     const commitAudioTurn = vi.fn();
     const provider: RealtimeVoiceProviderPlugin = {
       id: "relay-test",
@@ -1233,7 +1233,7 @@ describe("talk realtime gateway relay", () => {
       turnId: "turn-1",
     });
 
-    expect(commitAudioTurn).not.toHaveBeenCalled();
+    expect(commitAudioTurn).toHaveBeenCalledTimes(1);
   });
 
   it("commits provider input when forced agent consult disables server VAD responses", async () => {
