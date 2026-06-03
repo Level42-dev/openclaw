@@ -2168,40 +2168,65 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
         }
         const helloOkAuthScopes = deviceToken ? deviceToken.scopes : scopes;
         const controlUiTabs = listControlUiPluginTabs(helloOkAuthScopes);
-        const helloOk = {
-          type: "hello-ok",
-          protocol: PROTOCOL_VERSION,
-          server: {
-            version: resolveRuntimeServiceVersion(process.env),
-            connId,
-          },
-          features: {
-            methods: gatewayMethods,
-            events,
-            capabilities: [GATEWAY_SERVER_CAPS.CHAT_SEND_ROUTING_CONTRACT],
-          },
-          snapshot,
-          ...(controlUiTabs.length > 0 ? { controlUiTabs } : {}),
-          ...(Object.keys(pluginSurfaceUrls).length > 0 ? { pluginSurfaceUrls } : {}),
-          auth: {
-            role,
-            scopes: helloOkAuthScopes,
-            ...(deviceToken
-              ? {
-                  deviceToken: deviceToken.token,
-                  issuedAtMs: deviceToken.rotatedAtMs ?? deviceToken.createdAtMs,
-                  ...(bootstrapDeviceTokens.length > 1
-                    ? { deviceTokens: bootstrapDeviceTokens.slice(1) }
-                    : {}),
-                }
-              : {}),
-          },
-          policy: {
-            maxPayload: MAX_PAYLOAD_BYTES,
-            maxBufferedBytes: MAX_BUFFERED_BYTES,
-            tickIntervalMs: TICK_INTERVAL_MS,
-          },
+        const helloAuth = {
+          role,
+          scopes: helloOkAuthScopes,
+          ...(deviceToken
+            ? {
+                deviceToken: deviceToken.token,
+                issuedAtMs: deviceToken.rotatedAtMs ?? deviceToken.createdAtMs,
+                ...(bootstrapDeviceTokens.length > 1
+                  ? { deviceTokens: bootstrapDeviceTokens.slice(1) }
+                  : {}),
+              }
+            : {}),
         };
+        const helloPolicy = {
+          maxPayload: MAX_PAYLOAD_BYTES,
+          maxBufferedBytes: MAX_BUFFERED_BYTES,
+          tickIntervalMs: TICK_INTERVAL_MS,
+        };
+        const voicePeHandshake =
+          connectParams.client.platform === "esp32-s3" ||
+          connectParams.client.deviceFamily === "voice-pe";
+        const helloOk = voicePeHandshake
+          ? {
+              type: "hello-ok",
+              protocol: PROTOCOL_VERSION,
+              server: {
+                version: resolveRuntimeServiceVersion(process.env),
+                connId,
+              },
+              features: {
+                methods: [
+                  "talk.session.create",
+                  "talk.session.appendAudio",
+                  "talk.session.endTurn",
+                  "talk.session.close",
+                ],
+                events: ["connect.challenge", "talk.event"],
+              },
+              auth: helloAuth,
+              policy: helloPolicy,
+            }
+          : {
+              type: "hello-ok",
+              protocol: PROTOCOL_VERSION,
+              server: {
+                version: resolveRuntimeServiceVersion(process.env),
+                connId,
+              },
+              features: {
+                methods: gatewayMethods,
+                events,
+                capabilities: [GATEWAY_SERVER_CAPS.CHAT_SEND_ROUTING_CONTRACT],
+              },
+              snapshot,
+              ...(controlUiTabs.length > 0 ? { controlUiTabs } : {}),
+              ...(Object.keys(pluginSurfaceUrls).length > 0 ? { pluginSurfaceUrls } : {}),
+              auth: helloAuth,
+              policy: helloPolicy,
+            };
         advanceHandshakePhase("hello_payload_prepared");
 
         let revokedBootstrapTokenRecord:

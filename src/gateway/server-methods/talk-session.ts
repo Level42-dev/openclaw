@@ -37,6 +37,7 @@ import {
 import {
   cancelTalkRealtimeRelayTurn,
   createTalkRealtimeRelaySession,
+  endTalkRealtimeRelayTurn,
   sendTalkRealtimeRelayAudio,
   steerTalkRealtimeRelayAgentRun,
   stopTalkRealtimeRelaySession,
@@ -506,6 +507,16 @@ export const talkSessionHandlers: GatewayRequestHandlers = {
     }
     try {
       const session = getUnifiedTalkSession(params.sessionId);
+      if (session.kind === "realtime-relay") {
+        const connId = requireUnifiedTalkSessionConn(session, client?.connId);
+        endTalkRealtimeRelayTurn({
+          relaySessionId: session.relaySessionId,
+          connId,
+          turnId: params.turnId,
+        });
+        respond(true, { ok: true }, undefined);
+        return;
+      }
       respondManagedRoomTurn({
         session,
         connId: client?.connId,
