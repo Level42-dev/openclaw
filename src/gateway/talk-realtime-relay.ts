@@ -63,6 +63,8 @@ const FORCED_CONSULT_RESULT_MAX_CHARS = 1_800;
 const RELAY_OUTPUT_AUDIO_CHUNK_BYTES = 2_400; // 50 ms of mono PCM16 at 24 kHz.
 const MIN_RELAY_COMMIT_AUDIO_BYTES = 4_800; // 100 ms of mono PCM16 at 24 kHz.
 const relayLogger = getChildLogger({ subsystem: "talk/realtime-relay" });
+const OPENAI_EMPTY_COMMIT_ERROR_FRAGMENT = "buffer too small";
+const OPENAI_EMPTY_COMMIT_ZERO_AUDIO_FRAGMENT = "0.00ms of audio";
 
 type TalkRealtimeRelayEventPayload =
   | { relaySessionId: string; type: "ready" }
@@ -150,6 +152,14 @@ type CreateTalkRealtimeRelaySessionParams = {
   voice?: string;
   forceAgentConsultOnFinalTranscript?: boolean;
 };
+
+function isEmptyProviderCommitError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes(OPENAI_EMPTY_COMMIT_ERROR_FRAGMENT) &&
+    normalized.includes(OPENAI_EMPTY_COMMIT_ZERO_AUDIO_FRAGMENT.toLowerCase())
+  );
+}
 
 type TalkRealtimeRelaySessionResult = {
   provider: string;
@@ -708,6 +718,18 @@ export async function createTalkRealtimeRelaySession(
       emit({ relaySessionId, type: "ready" }, { type: "session.ready", payload: null });
     },
     onError: (error) => {
+      if (isEmptyProviderCommitError(error.message)) {
+        const relay = relayRef.current;
+        if (relay) {
+          relay.inputAudioBytesSinceCommit = 0;
+          relay.providerCommittedInputAudio = true;
+        }
+        relayLogger.info(
+          { relaySessionId, connId: params.connId, providerError: error.message },
+          "realtime relay provider empty commit ignored",
+        );
+        return;
+      }
       relayLogger.warn(
         { relaySessionId, connId: params.connId, providerError: error.message },
         "realtime relay provider error",
@@ -999,17 +1021,18 @@ export function endTalkRealtimeRelayTurn(params: {
   if (!ended.ok) {
     return;
   }
-  if (session.providerAutoRespondsToAudio) {
-    relayLogger.info(
-      { relaySessionId: session.id, connId: session.connId },
-      "realtime relay provider commit skipped: server VAD owns audio turn",
-    );
-  } else if (session.providerCommittedInputAudio) {
+  if (session.providerCommittedInputAudio) {
     relayLogger.info(
       { relaySessionId: session.id, connId: session.connId },
       "realtime relay provider commit skipped: input buffer already committed",
     );
   } else {
+    if (session.providerAutoRespondsToAudio) {
+      relayLogger.info(
+        { relaySessionId: session.id, connId: session.connId },
+        "realtime relay provider manual commit fallback: server VAD has not committed input",
+      );
+    }
     session.bridge.commitAudioTurn();
   }
   session.inputAudioBytesSinceCommit = 0;
