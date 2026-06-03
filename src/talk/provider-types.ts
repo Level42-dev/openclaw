@@ -190,6 +190,7 @@ export type RealtimeVoiceBridge = {
   supportsToolResultContinuation?: boolean;
   connect(): Promise<void>;
   sendAudio(audio: Buffer): void;
+  commitAudioTurn?(): void;
   setMediaTimestamp(ts: number): void;
   sendUserMessage?(text: string): void;
   triggerGreeting?(instructions?: string): void;

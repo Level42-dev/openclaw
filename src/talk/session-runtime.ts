@@ -39,6 +39,7 @@ export type RealtimeVoiceBridgeSession = {
   close(): void;
   connect(): Promise<void>;
   sendAudio(audio: Buffer): void;
+  commitAudioTurn(): void;
   sendUserMessage(text: string): void;
   handleBargeIn(options?: RealtimeVoiceBargeInOptions): void;
   setMediaTimestamp(ts: number): void;
@@ -93,6 +94,7 @@ export function createRealtimeVoiceBridgeSession(
     close: () => requireBridge().close(),
     connect: () => requireBridge().connect(),
     sendAudio: (audio) => requireBridge().sendAudio(audio),
+    commitAudioTurn: () => requireBridge().commitAudioTurn?.(),
     sendUserMessage: (text) => requireBridge().sendUserMessage?.(text),
     handleBargeIn: (options) => requireBridge().handleBargeIn?.(options),
     setMediaTimestamp: (ts) => requireBridge().setMediaTimestamp(ts),

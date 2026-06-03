@@ -532,6 +532,16 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
     });
   }
 
+  commitAudioTurn(): void {
+    if (!this.connected || !this.sessionConfigured || this.ws?.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    this.sendEvent({ type: "input_audio_buffer.commit" });
+    if (this.config.autoRespondToAudio === false) {
+      this.requestResponseCreate();
+    }
+  }
+
   setMediaTimestamp(ts: number): void {
     this.latestMediaTimestamp = ts;
   }
@@ -723,6 +733,7 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
         });
 
         ws.on("close", (code, reasonBuffer) => {
+          const wasConfigured = this.sessionConfigured;
           captureOpenAIRealtimeWsClose({
             url,
             flowId: this.flowId,
@@ -737,7 +748,6 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
             }
             return;
           }
-          const wasSessionConfigured = this.sessionConfigured;
           this.connected = false;
           this.sessionConfigured = false;
           if (this.intentionallyClosed) {
@@ -745,7 +755,7 @@ class OpenAIRealtimeVoiceBridge implements RealtimeVoiceBridge {
             this.config.onClose?.("completed");
             return;
           }
-          if (!wasSessionConfigured && !settled) {
+          if (!wasConfigured && !settled) {
             settleReject(new Error("OpenAI realtime connection closed before ready"));
             return;
           }
