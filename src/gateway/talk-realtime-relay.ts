@@ -56,6 +56,7 @@ const RELAY_EVENT = "talk.event";
 const RELAY_TRANSCRIPT_ECHO_LOOKBACK_MS = 12_000;
 const FORCED_CONSULT_FALLBACK_DELAY_MS = 200;
 const FORCED_CONSULT_RESULT_MAX_CHARS = 1_800;
+const RELAY_OUTPUT_AUDIO_CHUNK_BYTES = 2_400; // 50 ms of mono PCM16 at 24 kHz.
 
 type TalkRealtimeRelayEventPayload =
   | { relaySessionId: string; type: "ready" }
@@ -369,20 +370,27 @@ export function createTalkRealtimeRelaySession(
       isOpen: () => Boolean(relayRef.current && relaySessions.has(relayRef.current.id)),
       sendAudio: (audio) => {
         const turnId = relayRef.current ? ensureRelayTurn(relayRef.current) : undefined;
-        emit(
-          {
-            relaySessionId,
-            type: "audio",
-            audioBase64: audio.toString("base64"),
-            ...(currentOutputItemId ? { itemId: currentOutputItemId } : {}),
-            ...(currentOutputResponseId ? { responseId: currentOutputResponseId } : {}),
-          },
-          {
-            type: "output.audio.delta",
-            turnId,
-            payload: { byteLength: audio.length },
-          },
-        );
+        for (let offset = 0; offset < audio.length; offset += RELAY_OUTPUT_AUDIO_CHUNK_BYTES) {
+          const chunk = audio.subarray(offset, offset + RELAY_OUTPUT_AUDIO_CHUNK_BYTES);
+          emit(
+            {
+              relaySessionId,
+              type: "audio",
+              audioBase64: chunk.toString("base64"),
+              ...(currentOutputItemId ? { itemId: currentOutputItemId } : {}),
+              ...(currentOutputResponseId ? { responseId: currentOutputResponseId } : {}),
+            },
+            {
+              type: "output.audio.delta",
+              turnId,
+              payload: {
+                byteLength: chunk.length,
+                sourceByteLength: audio.length,
+                sourceOffsetBytes: offset,
+              },
+            },
+          );
+        }
       },
       clearAudio: () => {
         const turnId = relayRef.current ? ensureRelayTurn(relayRef.current) : undefined;
@@ -753,6 +761,24 @@ export function sendTalkRealtimeRelayAudio(params: {
   if (typeof params.timestamp === "number" && Number.isFinite(params.timestamp)) {
     session.bridge.setMediaTimestamp(params.timestamp);
   }
+}
+
+export function endTalkRealtimeRelayTurn(params: {
+  relaySessionId: string;
+  connId: string;
+  turnId?: string;
+}): void {
+  const session = getRelaySession(params.relaySessionId, params.connId);
+  const ended = session.talk.endTurn({ turnId: params.turnId, payload: {} });
+  if (!ended.ok) {
+    return;
+  }
+  broadcastToOwner(session.context, session.connId, {
+    relaySessionId: session.id,
+    type: "inputAudio",
+    byteLength: 0,
+    talkEvent: ended.event,
+  });
 }
 
 export function submitTalkRealtimeRelayToolResult(params: {

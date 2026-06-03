@@ -197,6 +197,70 @@ describe("talk realtime gateway relay", () => {
     expectRecordFields(mockCallArg(mock, 0, 2), { runId: "run-1", state: "aborted" });
   }
 
+  it("splits large relay output audio deltas into firmware-sized chunks", async () => {
+    const bridge = {
+      connect: vi.fn(async () => {
+        bridgeRequest?.onReady?.();
+        bridgeRequest?.onAudio(Buffer.alloc(18_000, 7));
+      }),
+      sendAudio: vi.fn(),
+      setMediaTimestamp: vi.fn(),
+      handleBargeIn: vi.fn(),
+      submitToolResult: vi.fn(),
+      acknowledgeMark: vi.fn(),
+      close: vi.fn(),
+      isConnected: vi.fn(() => true),
+    };
+    let bridgeRequest: RealtimeVoiceBridgeCreateRequest | undefined;
+    const provider: RealtimeVoiceProviderPlugin = {
+      id: "relay-test",
+      label: "Relay Test",
+      isConfigured: () => true,
+      createBridge: (req) => {
+        bridgeRequest = req;
+        return bridge;
+      },
+    };
+    const events: Array<{ event: string; payload: unknown; connIds: string[] }> = [];
+    const context = {
+      broadcastToConnIds: (event: string, payload: unknown, connIds: ReadonlySet<string>) => {
+        events.push({ event, payload, connIds: [...connIds] });
+      },
+    } as never;
+
+    const session = createTalkRealtimeRelaySession({
+      context,
+      connId: "conn-1",
+      provider,
+      providerConfig: {},
+      instructions: "be brief",
+      tools: [],
+    });
+    await Promise.resolve();
+
+    const audioPayloads = events
+      .map((entry) => entry.payload)
+      .filter(
+        (payload): payload is Record<string, unknown> =>
+          typeof payload === "object" &&
+          payload !== null &&
+          (payload as Record<string, unknown>).type === "audio",
+      );
+    expect(audioPayloads).toHaveLength(8);
+    expect(
+      audioPayloads.map((payload) => Buffer.from(String(payload.audioBase64), "base64").length),
+    ).toEqual([2_400, 2_400, 2_400, 2_400, 2_400, 2_400, 2_400, 1_200]);
+    expect(
+      audioPayloads.map(
+        (payload) =>
+          (payload.talkEvent as { payload?: { byteLength?: number } }).payload?.byteLength,
+      ),
+    ).toEqual([2_400, 2_400, 2_400, 2_400, 2_400, 2_400, 2_400, 1_200]);
+    expect(
+      audioPayloads.every((payload) => payload.relaySessionId === session.relaySessionId),
+    ).toBe(true);
+  });
+
   it("bridges browser audio, transcripts, and tool results through a backend provider", async () => {
     let bridgeRequest: RealtimeVoiceBridgeCreateRequest | undefined;
     const bridge = {

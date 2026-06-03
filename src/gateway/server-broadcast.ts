@@ -51,6 +51,17 @@ const EVENT_SCOPE_GUARDS: Record<string, string[]> = {
 // scope would otherwise reject non-operator roles. Nodes act on these updates
 // (e.g. reconfiguring wake-word triggers).
 const NODE_ALLOWED_EVENTS = new Set<string>(["voicewake.changed", "voicewake.routing.changed"]);
+const VOICE_PE_ALLOWED_EVENTS = new Set<string>([
+  "shutdown",
+  "talk.event",
+  "voicewake.changed",
+  "voicewake.routing.changed",
+  "device.pair.requested",
+  "device.pair.resolved",
+  "node.pair.requested",
+  "node.pair.resolved",
+  "node.invoke.request",
+]);
 
 function serializeFrameField(name: "payload" | "stateVersion", value: unknown): string {
   const fieldJSON = JSON.stringify({ [name]: value });
@@ -60,6 +71,14 @@ function serializeFrameField(name: "payload" | "stateVersion", value: unknown): 
 }
 
 function hasEventScope(client: GatewayWsClient, event: string): boolean {
+  if (
+    (client.connect.client.platform === "esp32-s3" ||
+      client.connect.client.deviceFamily === "voice-pe") &&
+    !VOICE_PE_ALLOWED_EVENTS.has(event)
+  ) {
+    return false;
+  }
+
   const required = EVENT_SCOPE_GUARDS[event];
   // Plugin-defined gateway broadcast events (plugin.* namespace) are allowed
   // for operator.write and operator.admin scopes. Explicit plugin.* entries
