@@ -773,6 +773,7 @@ export function endTalkRealtimeRelayTurn(params: {
   if (!ended.ok) {
     return;
   }
+  session.bridge.commitAudioTurn();
   broadcastToOwner(session.context, session.connId, {
     relaySessionId: session.id,
     type: "inputAudio",

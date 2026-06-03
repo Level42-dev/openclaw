@@ -1050,6 +1050,33 @@ describe("buildOpenAIRealtimeVoiceProvider", () => {
     );
   });
 
+  it("commits manual audio turns and requests a response when auto responses are disabled", async () => {
+    const provider = buildOpenAIRealtimeVoiceProvider();
+    const bridge = provider.createBridge({
+      providerConfig: { apiKey: "sk-test" }, // pragma: allowlist secret
+      autoRespondToAudio: false,
+      onAudio: vi.fn(),
+      onClearAudio: vi.fn(),
+    });
+    const connecting = bridge.connect();
+    const socket = FakeWebSocket.instances[0];
+    if (!socket) {
+      throw new Error("expected bridge to create a websocket");
+    }
+
+    socket.readyState = FakeWebSocket.OPEN;
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "session.updated" })));
+    await connecting;
+
+    bridge.commitAudioTurn?.();
+
+    expect(parseSent(socket).slice(-2)).toEqual([
+      { type: "input_audio_buffer.commit" },
+      { type: "response.create" },
+    ]);
+  });
+
   it("can disable realtime response interruption while keeping audio responses enabled", async () => {
     const provider = buildOpenAIRealtimeVoiceProvider();
     const bridge = provider.createBridge({

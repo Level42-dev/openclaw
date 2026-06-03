@@ -9,6 +9,7 @@ import {
   cancelTalkRealtimeRelayTurn,
   clearTalkRealtimeRelaySessionsForTest,
   createTalkRealtimeRelaySession,
+  endTalkRealtimeRelayTurn,
   registerTalkRealtimeRelayAgentRun,
   sendTalkRealtimeRelayAudio,
   steerTalkRealtimeRelayAgentRun,
@@ -1002,6 +1003,47 @@ describe("talk realtime gateway relay", () => {
         audioBase64: Buffer.from("audio").toString("base64"),
       }),
     ).toThrow("Unknown realtime relay session");
+  });
+
+  it("commits provider input when the relay turn ends", () => {
+    const commitAudioTurn = vi.fn();
+    const provider: RealtimeVoiceProviderPlugin = {
+      id: "relay-test",
+      label: "Relay Test",
+      isConfigured: () => true,
+      createBridge: () => ({
+        connect: vi.fn(async () => undefined),
+        sendAudio: vi.fn(),
+        commitAudioTurn,
+        setMediaTimestamp: vi.fn(),
+        handleBargeIn: vi.fn(),
+        submitToolResult: vi.fn(),
+        acknowledgeMark: vi.fn(),
+        close: vi.fn(),
+        isConnected: vi.fn(() => true),
+      }),
+    };
+    const session = createTalkRealtimeRelaySession({
+      context: { broadcastToConnIds: vi.fn() } as never,
+      connId: "conn-1",
+      provider,
+      providerConfig: {},
+      instructions: "brief",
+      tools: [],
+    });
+
+    sendTalkRealtimeRelayAudio({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+      audioBase64: Buffer.from("audio").toString("base64"),
+    });
+    endTalkRealtimeRelayTurn({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+      turnId: "turn-1",
+    });
+
+    expect(commitAudioTurn).toHaveBeenCalledTimes(1);
   });
 
   it("correlates output audio with the active relay turn", () => {
