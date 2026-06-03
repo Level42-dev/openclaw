@@ -21,6 +21,7 @@ import { controlRealtimeVoiceAgentRun } from "../../talk/agent-run-control.js";
 import { resolveConfiguredRealtimeVoiceProvider } from "../../talk/provider-resolver.js";
 import type { TalkBrain, TalkMode, TalkTransport } from "../../talk/talk-events.js";
 import { ADMIN_SCOPE } from "../operator-scopes.js";
+import { resolveConfiguredSecretInputString } from "../resolve-configured-secret-input-string.js";
 import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
 import {
   cancelTalkHandoffTurn,
@@ -142,6 +143,72 @@ function respondUnavailable(respond: RespondFn, err: unknown) {
 
 function respondOk(respond: RespondFn, payload: unknown = { ok: true }) {
   respond(true, payload, undefined);
+}
+
+function asConfigRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+async function resolveRealtimeProviderSecretRefs(params: {
+  context: GatewayRequestContext;
+  providerId?: string;
+  providerConfigs?: Record<string, Record<string, unknown> | undefined>;
+}): Promise<Record<string, Record<string, unknown> | undefined> | undefined> {
+  if (!params.providerConfigs) {
+    return params.providerConfigs;
+  }
+  const runtimeConfig = params.context.getRuntimeConfig();
+  let nextConfigs: Record<string, Record<string, unknown> | undefined> | undefined;
+  const resolveApiKey = async (owner: Record<string, unknown>, path: string) => {
+    if (owner.apiKey === undefined || typeof owner.apiKey === "string") {
+      return;
+    }
+    const resolved = await resolveConfiguredSecretInputString({
+      config: runtimeConfig,
+      env: process.env,
+      value: owner.apiKey,
+      path,
+      unresolvedReasonStyle: "detailed",
+    });
+    if (!resolved.value) {
+      throw new Error(resolved.unresolvedRefReason ?? `${path} SecretRef is unresolved.`);
+    }
+    owner.apiKey = resolved.value;
+  };
+
+  for (const [providerId, config] of Object.entries(params.providerConfigs)) {
+    const raw = asConfigRecord(config);
+    if (!raw) {
+      continue;
+    }
+    let next = { ...raw };
+    await resolveApiKey(next, `talk.realtime.providers.${providerId}.apiKey`);
+
+    const providerCompat = asConfigRecord(next[providerId]);
+    if (providerCompat) {
+      next = { ...next, [providerId]: { ...providerCompat } };
+      await resolveApiKey(
+        next[providerId] as Record<string, unknown>,
+        `talk.realtime.${providerId}.apiKey`,
+      );
+    }
+
+    const providers = asConfigRecord(next.providers);
+    const nested = providers ? asConfigRecord(providers[providerId]) : undefined;
+    if (providers && nested) {
+      const nestedNext = { ...nested };
+      await resolveApiKey(nestedNext, `talk.realtime.providers.${providerId}.apiKey`);
+      next = { ...next, providers: { ...providers, [providerId]: nestedNext } };
+    }
+
+    if (next !== raw) {
+      nextConfigs = { ...(nextConfigs ?? params.providerConfigs), [providerId]: next };
+    }
+  }
+
+  return nextConfigs ?? params.providerConfigs;
 }
 
 function respondManagedRoomTurn(params: {
@@ -287,7 +354,11 @@ export const talkSessionHandlers: GatewayRequestHandlers = {
         const realtimeConfig = buildTalkRealtimeConfig(runtimeConfig, params.provider);
         const resolution = resolveConfiguredRealtimeVoiceProvider({
           configuredProviderId: realtimeConfig.provider,
-          providerConfigs: realtimeConfig.providers,
+          providerConfigs: await resolveRealtimeProviderSecretRefs({
+            context,
+            providerId: realtimeConfig.provider,
+            providerConfigs: realtimeConfig.providers,
+          }),
           cfg: runtimeConfig,
           cfgForResolve: runtimeConfig,
           defaultModel: realtimeConfig.model,
@@ -297,7 +368,7 @@ export const talkSessionHandlers: GatewayRequestHandlers = {
           requested: params,
           defaults: realtimeConfig,
         });
-        const session = createTalkRealtimeRelaySession({
+        const session = await createTalkRealtimeRelaySession({
           context,
           connId,
           cfg: runtimeConfig,

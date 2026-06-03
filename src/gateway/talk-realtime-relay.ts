@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { resolveExpiresAtMsFromDurationMs } from "@openclaw/normalization-core/number-coercion";
 import type { OpenClawConfig } from "../config/types.js";
+import { getChildLogger } from "../logging/logger.js";
 import type { RealtimeVoiceProviderPlugin } from "../plugins/types.js";
 import {
   REALTIME_VOICE_AGENT_CONSULT_TOOL_NAME,
@@ -41,6 +42,7 @@ import {
   createTalkSessionController,
 } from "../talk/talk-session-controller.js";
 import { abortChatRunById } from "./chat-abort.js";
+import { resolveConfiguredSecretInputString } from "./resolve-configured-secret-input-string.js";
 import type { GatewayRequestContext } from "./server-methods/shared-types.js";
 import {
   closeExpiredTalkRelaySessions,
@@ -57,6 +59,8 @@ const RELAY_TRANSCRIPT_ECHO_LOOKBACK_MS = 12_000;
 const FORCED_CONSULT_FALLBACK_DELAY_MS = 200;
 const FORCED_CONSULT_RESULT_MAX_CHARS = 1_800;
 const RELAY_OUTPUT_AUDIO_CHUNK_BYTES = 2_400; // 50 ms of mono PCM16 at 24 kHz.
+const MIN_RELAY_COMMIT_AUDIO_BYTES = 4_800; // 100 ms of mono PCM16 at 24 kHz.
+const relayLogger = getChildLogger({ subsystem: "talk/realtime-relay" });
 
 type TalkRealtimeRelayEventPayload =
   | { relaySessionId: string; type: "ready" }
@@ -108,6 +112,9 @@ type RelaySession = {
   completedAgentToolCalls: Set<string>;
   forcedConsults: RealtimeVoiceForcedConsultCoordinator;
   transcript: RealtimeVoiceTranscriptEntry[];
+  inputAudioBytesSinceCommit: number;
+  providerCommittedInputAudio: boolean;
+  providerAutoRespondsToAudio: boolean;
 };
 
 type CreateTalkRealtimeRelaySessionParams = {
@@ -135,6 +142,64 @@ type TalkRealtimeRelaySessionResult = {
 };
 
 const relaySessions = new Map<string, RelaySession>();
+
+function asRelayConfigRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+async function resolveRealtimeRelayProviderConfig(
+  params: CreateTalkRealtimeRelaySessionParams,
+): Promise<RealtimeVoiceProviderConfig> {
+  const raw = asRelayConfigRecord(params.providerConfig);
+  if (!raw) {
+    return params.providerConfig;
+  }
+  let nextConfig: Record<string, unknown> | undefined;
+  const resolveApiKey = async (owner: Record<string, unknown>, path: string) => {
+    if (owner.apiKey === undefined || typeof owner.apiKey === "string") {
+      return;
+    }
+    const resolved = await resolveConfiguredSecretInputString({
+      config: params.cfg ?? params.context.getRuntimeConfig(),
+      env: process.env,
+      value: owner.apiKey,
+      path,
+      unresolvedReasonStyle: "detailed",
+    });
+    if (!resolved.value) {
+      throw new Error(resolved.unresolvedRefReason ?? `${path} SecretRef is unresolved.`);
+    }
+    owner.apiKey = resolved.value;
+  };
+
+  const providers = asRelayConfigRecord(raw.providers);
+  const nestedProvider = providers ? asRelayConfigRecord(providers[params.provider.id]) : undefined;
+  if (providers && nestedProvider) {
+    const nextNestedProvider = { ...nestedProvider };
+    await resolveApiKey(nextNestedProvider, `talk.realtime.providers.${params.provider.id}.apiKey`);
+    if (nextNestedProvider !== nestedProvider) {
+      nextConfig = {
+        ...(nextConfig ?? raw),
+        providers: { ...providers, [params.provider.id]: nextNestedProvider },
+      };
+    }
+  }
+
+  const providerCompat = asRelayConfigRecord(raw[params.provider.id]);
+  if (providerCompat) {
+    const nextProviderCompat = { ...providerCompat };
+    await resolveApiKey(nextProviderCompat, `talk.realtime.${params.provider.id}.apiKey`);
+    nextConfig = { ...(nextConfig ?? raw), [params.provider.id]: nextProviderCompat };
+  }
+
+  const topLevel = { ...(nextConfig ?? raw) };
+  await resolveApiKey(topLevel, `talk.realtime.providers.${params.provider.id}.apiKey`);
+  nextConfig = topLevel;
+
+  return nextConfig as RealtimeVoiceProviderConfig;
+}
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -282,6 +347,10 @@ function submitRelayAgentControlProviderResults(
 }
 
 function closeRelaySession(session: RelaySession, reason: "completed" | "error"): void {
+  relayLogger.info(
+    { relaySessionId: session.id, connId: session.connId, reason, source: "gateway-close" },
+    "closing realtime relay session",
+  );
   session.forcedConsults.clear();
   relaySessions.delete(session.id);
   forgetUnifiedTalkSession(session.id);
@@ -328,11 +397,12 @@ function enforceRelaySessionLimits(connId: string): void {
   }
 }
 
-export function createTalkRealtimeRelaySession(
+export async function createTalkRealtimeRelaySession(
   params: CreateTalkRealtimeRelaySessionParams,
-): TalkRealtimeRelaySessionResult {
+): Promise<TalkRealtimeRelaySessionResult> {
   enforceRelaySessionLimits(params.connId);
   const forceAgentConsultOnFinalTranscript = params.forceAgentConsultOnFinalTranscript === true;
+  const providerAutoRespondsToAudio = !forceAgentConsultOnFinalTranscript;
   const relaySessionId = randomUUID();
   const expiresAtMs = resolveExpiresAtMsFromDurationMs(RELAY_SESSION_TTL_MS);
   if (expiresAtMs === undefined) {
@@ -356,14 +426,15 @@ export function createTalkRealtimeRelaySession(
   let currentOutputItemId: string | undefined;
   let currentOutputResponseId: string | undefined;
   const relayRef: { current?: RelaySession } = {};
+  const providerConfig = await resolveRealtimeRelayProviderConfig(params);
   const bridge = createRealtimeVoiceBridgeSession({
     provider: params.provider,
     cfg: params.cfg,
-    providerConfig: params.providerConfig,
+    providerConfig,
     audioFormat: REALTIME_VOICE_AUDIO_FORMAT_PCM16_24KHZ,
     instructions: params.instructions,
-    autoRespondToAudio: !forceAgentConsultOnFinalTranscript,
-    interruptResponseOnInputAudio: !forceAgentConsultOnFinalTranscript,
+    autoRespondToAudio: providerAutoRespondsToAudio,
+    interruptResponseOnInputAudio: providerAutoRespondsToAudio,
     tools: params.tools,
     markStrategy: "ack-immediately",
     audioSink: {
@@ -419,6 +490,14 @@ export function createTalkRealtimeRelaySession(
     },
     onEvent: (event) => {
       if (event.direction !== "server") {
+        return;
+      }
+      if (event.type === "input_audio_buffer.committed") {
+        const relay = relayRef.current;
+        if (relay) {
+          relay.inputAudioBytesSinceCommit = 0;
+          relay.providerCommittedInputAudio = true;
+        }
         return;
       }
       if (
@@ -550,16 +629,29 @@ export function createTalkRealtimeRelaySession(
     },
     onReady: () =>
       emit({ relaySessionId, type: "ready" }, { type: "session.ready", payload: null }),
-    onError: (error) =>
+    onError: (error) => {
+      relayLogger.warn(
+        { relaySessionId, connId: params.connId, providerError: error.message },
+        "realtime relay provider error",
+      );
       emit(
         { relaySessionId, type: "error", message: error.message },
         { type: "session.error", payload: { message: error.message }, final: true },
-      ),
+      );
+    },
     onClose: (reason) => {
       const active = relaySessions.get(relaySessionId);
       if (!active) {
+        relayLogger.info(
+          { relaySessionId, connId: params.connId, reason, source: "provider-close-inactive" },
+          "realtime relay provider close ignored for inactive session",
+        );
         return;
       }
+      relayLogger.info(
+        { relaySessionId, connId: params.connId, reason, source: "provider-close" },
+        "realtime relay provider closed session",
+      );
       active.forcedConsults.clear();
       relaySessions.delete(relaySessionId);
       forgetUnifiedTalkSession(relaySessionId);
@@ -590,11 +682,18 @@ export function createTalkRealtimeRelaySession(
     completedAgentToolCalls: new Set(),
     forcedConsults: createRealtimeVoiceForcedConsultCoordinator(),
     transcript: [],
+    inputAudioBytesSinceCommit: 0,
+    providerCommittedInputAudio: false,
+    providerAutoRespondsToAudio,
   };
   relayRef.current = relay;
   relay.cleanupTimer.unref?.();
   relaySessions.set(relaySessionId, relay);
   bridge.connect().catch((error: unknown) => {
+    relayLogger.warn(
+      { relaySessionId, connId: params.connId, providerError: formatError(error) },
+      "realtime relay provider connect failed",
+    );
     emit({ relaySessionId, type: "error", message: formatError(error) });
     const active = relaySessions.get(relaySessionId);
     if (active) {
@@ -748,6 +847,7 @@ export function sendTalkRealtimeRelayAudio(params: {
   const turnId = ensureRelayTurn(session);
   const audio = Buffer.from(params.audioBase64, "base64");
   session.bridge.sendAudio(audio);
+  session.inputAudioBytesSinceCommit += audio.byteLength;
   broadcastToOwner(session.context, session.connId, {
     relaySessionId: session.id,
     type: "inputAudio",
@@ -769,11 +869,40 @@ export function endTalkRealtimeRelayTurn(params: {
   turnId?: string;
 }): void {
   const session = getRelaySession(params.relaySessionId, params.connId);
+  if (
+    session.inputAudioBytesSinceCommit < MIN_RELAY_COMMIT_AUDIO_BYTES &&
+    !session.providerCommittedInputAudio
+  ) {
+    relayLogger.info(
+      {
+        relaySessionId: session.id,
+        connId: session.connId,
+        audioBytes: session.inputAudioBytesSinceCommit,
+        minAudioBytes: MIN_RELAY_COMMIT_AUDIO_BYTES,
+      },
+      "realtime relay commit skipped: audio buffer too small",
+    );
+    return;
+  }
   const ended = session.talk.endTurn({ turnId: params.turnId, payload: {} });
   if (!ended.ok) {
     return;
   }
-  session.bridge.commitAudioTurn();
+  if (session.providerAutoRespondsToAudio) {
+    relayLogger.info(
+      { relaySessionId: session.id, connId: session.connId },
+      "realtime relay provider commit skipped: server VAD owns audio turn",
+    );
+  } else if (session.providerCommittedInputAudio) {
+    relayLogger.info(
+      { relaySessionId: session.id, connId: session.connId },
+      "realtime relay provider commit skipped: input buffer already committed",
+    );
+  } else {
+    session.bridge.commitAudioTurn();
+  }
+  session.inputAudioBytesSinceCommit = 0;
+  session.providerCommittedInputAudio = false;
   broadcastToOwner(session.context, session.connId, {
     relaySessionId: session.id,
     type: "inputAudio",
