@@ -48,8 +48,8 @@ dated diagnostic logs for active slices.
 - Anchor issue: <https://github.com/openclaw/openclaw/issues/78725>
 - Branch: `clawtalk/tomatenmauer-realtime-talk-triage`
 - Draft PR: <https://github.com/Jarvis-Level42/openclaw/pull/14>
-- Current coordination commit: `4dec2257bb589565bbc59001d28db78a85d195ba`
-  (`docs: track tomatenmauer talk triage`).
+- Coordination branch: `origin/clawtalk/tomatenmauer-realtime-talk-triage`;
+  verify the current head with `git rev-parse HEAD` before resuming.
 - Code baseline for diagnostics: `origin/clawtalk/base` at
   `907df590dbc6ed7ae9574410500bed80daa33bad`
   (`fix(talk): tolerate relay commit races`).
@@ -57,3 +57,7 @@ dated diagnostic logs for active slices.
 - Current next action: capture a sanitized timeline for one failing Talk turn on
   Tomatenmauer, covering transcript receipt, agent response production,
   `talk.speak` synthesis, and playback start/end or failure.
+- Resume rule: use a fresh PO-owned checkout/worktree under
+  `/home/openclaw/.openclaw/project-checkouts/`, verify `pwd`, git root,
+  remotes, and status before any capture/build/patch, and do not rely on hidden
+  Jarvis session context.
