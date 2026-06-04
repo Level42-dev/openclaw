@@ -4194,6 +4194,10 @@ export const chatHandlers: GatewayRequestHandlers = {
                 });
               }
               if (!context.chatAbortedRuns.has(clientRunId)) {
+                const finalReplyPayloads = deliveredReplies
+                  .filter((entryItem) => entryItem.kind === "final")
+                  .map((entryCandidate) => entryCandidate.payload);
+                const finalReplyText = buildTranscriptReplyText(finalReplyPayloads);
                 const returnedAgentError = shouldBroadcastAgentError
                   ? errorShape(
                       ErrorCodes.UNAVAILABLE,
@@ -4212,7 +4216,14 @@ export const chatHandlers: GatewayRequestHandlers = {
                           status: "error" as const,
                           summary: returnedAgentErrorMessage ?? "agent returned an error payload",
                         }
-                      : { runId: clientRunId, status: "ok" as const },
+                      : {
+                          runId: clientRunId,
+                          status: "ok" as const,
+                          result: {
+                            payloads: finalReplyPayloads,
+                            text: finalReplyText,
+                          },
+                        },
                     ...(returnedAgentError ? { error: returnedAgentError } : {}),
                   },
                 });

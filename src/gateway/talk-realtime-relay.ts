@@ -60,6 +60,7 @@ const FORCED_CONSULT_FALLBACK_DELAY_MS = 200;
 const FORCED_CONSULT_RESULT_MAX_CHARS = 1_800;
 const RELAY_OUTPUT_AUDIO_CHUNK_BYTES = 2_400; // 50 ms of mono PCM16 at 24 kHz.
 const MIN_RELAY_COMMIT_AUDIO_BYTES = 4_800; // 100 ms of mono PCM16 at 24 kHz.
+const DEFAULT_GATEWAY_RELAY_SESSION_KEY = "agent:main:main";
 const relayLogger = getChildLogger({ subsystem: "talk/realtime-relay" });
 const OPENAI_EMPTY_COMMIT_ERROR_FRAGMENT = "buffer too small";
 const OPENAI_EMPTY_COMMIT_ZERO_AUDIO_FRAGMENT = "0.00ms of audio";
@@ -117,6 +118,8 @@ type RelaySession = {
   inputAudioBytesSinceCommit: number;
   providerCommittedInputAudio: boolean;
   providerAutoRespondsToAudio: boolean;
+  forceAgentConsultOnFinalTranscript: boolean;
+  forcedConsultSpeechActive: boolean;
 };
 
 type CreateTalkRealtimeRelaySessionParams = {
@@ -450,6 +453,9 @@ export async function createTalkRealtimeRelaySession(
     audioSink: {
       isOpen: () => Boolean(relayRef.current && relaySessions.has(relayRef.current.id)),
       sendAudio: (audio) => {
+        if (shouldSuppressNativeRelayAssistantOutput(relayRef.current)) {
+          return;
+        }
         const turnId = relayRef.current ? ensureRelayTurn(relayRef.current) : undefined;
         for (let offset = 0; offset < audio.length; offset += RELAY_OUTPUT_AUDIO_CHUNK_BYTES) {
           const chunk = audio.subarray(offset, offset + RELAY_OUTPUT_AUDIO_CHUNK_BYTES);
@@ -526,16 +532,22 @@ export async function createTalkRealtimeRelaySession(
         event.type === "response.done" ||
         event.type === "response.cancelled"
       ) {
-        emit({
-          relaySessionId,
-          type: "audioDone",
-          ...((event.itemId ?? currentOutputItemId)
-            ? { itemId: event.itemId ?? currentOutputItemId }
-            : {}),
-          ...((event.responseId ?? currentOutputResponseId)
-            ? { responseId: event.responseId ?? currentOutputResponseId }
-            : {}),
-        });
+        const relay = relayRef.current;
+        if (!shouldSuppressNativeRelayAssistantOutput(relay)) {
+          emit({
+            relaySessionId,
+            type: "audioDone",
+            ...((event.itemId ?? currentOutputItemId)
+              ? { itemId: event.itemId ?? currentOutputItemId }
+              : {}),
+            ...((event.responseId ?? currentOutputResponseId)
+              ? { responseId: event.responseId ?? currentOutputResponseId }
+              : {}),
+          });
+        }
+        if (relay?.forcedConsultSpeechActive) {
+          relay.forcedConsultSpeechActive = false;
+        }
         currentOutputItemId = undefined;
         currentOutputResponseId = undefined;
       }
@@ -545,6 +557,9 @@ export async function createTalkRealtimeRelaySession(
       const turnId = relay ? ensureRelayTurn(relay) : undefined;
       if (final && relay) {
         recordRealtimeVoiceTranscript(relay.transcript, role, text);
+      }
+      if (role === "assistant" && shouldSuppressNativeRelayAssistantOutput(relay)) {
+        return;
       }
       const eventType =
         role === "assistant"
@@ -644,7 +659,7 @@ export async function createTalkRealtimeRelaySession(
         const relay = relayRef.current;
         if (relay) {
           relay.inputAudioBytesSinceCommit = 0;
-          relay.providerCommittedInputAudio = true;
+          relay.providerCommittedInputAudio = false;
         }
         relayLogger.info(
           { relaySessionId, connId: params.connId, providerError: error.message },
@@ -707,6 +722,8 @@ export async function createTalkRealtimeRelaySession(
     inputAudioBytesSinceCommit: 0,
     providerCommittedInputAudio: false,
     providerAutoRespondsToAudio,
+    forceAgentConsultOnFinalTranscript,
+    forcedConsultSpeechActive: false,
   };
   relayRef.current = relay;
   relay.cleanupTimer.unref?.();
@@ -751,15 +768,20 @@ function scheduleForcedAgentConsult(session: RelaySession | undefined, question:
   if (!handle) {
     return;
   }
-  session.forcedConsults.schedule(handle, FORCED_CONSULT_FALLBACK_DELAY_MS, () => {
+  session.forcedConsults.schedule(handle, FORCED_CONSULT_FALLBACK_DELAY_MS, async () => {
     if (!relaySessions.has(session.id)) {
       return;
     }
     const turnId = ensureRelayTurn(session);
     const callId = handle.id;
     const itemId = `forced-consult-item-${randomUUID()}`;
+    const args = {
+      question: handle.question,
+      context:
+        "The realtime provider produced a final user transcript without invoking openclaw_agent_consult, so OpenClaw is forcing the consult for realtime Talk.",
+      responseStyle: "Reply in a concise spoken tone.",
+    };
     session.forcedConsults.markStarted(handle);
-    session.bridge.handleBargeIn({ audioPlaybackActive: true, force: true });
     broadcastToOwner(session.context, session.connId, {
       relaySessionId: session.id,
       type: "toolCall",
@@ -767,12 +789,7 @@ function scheduleForcedAgentConsult(session: RelaySession | undefined, question:
       callId,
       name: REALTIME_VOICE_AGENT_CONSULT_TOOL_NAME,
       forced: true,
-      args: {
-        question: handle.question,
-        context:
-          "The realtime provider produced a final user transcript without invoking openclaw_agent_consult, so OpenClaw is forcing the consult for realtime Talk.",
-        responseStyle: "Reply in a concise spoken tone.",
-      },
+      args,
       talkEvent: session.talk.emit({
         type: "tool.call",
         itemId,
@@ -785,7 +802,52 @@ function scheduleForcedAgentConsult(session: RelaySession | undefined, question:
         },
       }),
     });
+    try {
+      const { startTalkRealtimeAgentConsult } = await import("./talk-agent-consult.js");
+      const result = await startTalkRealtimeAgentConsult({
+        context: session.context,
+        client: null,
+        isWebchatConnect: () => false,
+        requestId: `talk-relay-forced-consult:${session.id}`,
+        sessionKey: session.sessionKey ?? DEFAULT_GATEWAY_RELAY_SESSION_KEY,
+        callId,
+        args,
+        relaySessionId: session.id,
+        connId: session.connId,
+      });
+      if (!result.ok) {
+        relayLogger.warn(
+          { relaySessionId: session.id, connId: session.connId, error: result.error.message },
+          "forced realtime relay agent consult failed",
+        );
+        try {
+          submitTalkRealtimeRelayToolResult({
+            relaySessionId: session.id,
+            connId: session.connId,
+            callId,
+            result: { error: result.error.message },
+          });
+        } catch (error: unknown) {
+          relayLogger.warn(
+            { relaySessionId: session.id, connId: session.connId, error: formatError(error) },
+            "forced realtime relay agent consult failure result submit failed",
+          );
+        }
+      }
+    } catch (error: unknown) {
+      relayLogger.warn(
+        { relaySessionId: session.id, connId: session.connId, error: formatError(error) },
+        "forced realtime relay agent consult failed",
+      );
+    }
   });
+}
+
+function shouldSuppressNativeRelayAssistantOutput(session: RelaySession | undefined): boolean {
+  return (
+    session?.forceAgentConsultOnFinalTranscript === true &&
+    session.forcedConsultSpeechActive !== true
+  );
 }
 
 function submitAlreadyDeliveredToolResult(
@@ -966,12 +1028,14 @@ export function submitTalkRealtimeRelayToolResult(params: {
         submitAlreadyDeliveredToolResult(session, nativeCallId, turnId);
       }
       if (text) {
+        session.forcedConsultSpeechActive = true;
         session.bridge.sendUserMessage(buildForcedConsultSpeechPrompt(text));
       }
     }
     const final = params.options?.willContinue !== true;
     if (final && !cancelled && !isWorkingToolResult(params.result)) {
       session.forcedConsults.markDelivered(forcedConsult);
+      session.completedAgentToolCalls.add(params.callId);
     }
     broadcastToolResultToOwner(session, {
       callId: params.callId,

@@ -705,6 +705,30 @@ describe("talk realtime gateway relay", () => {
 
     expectRecordFields(bridgeRequest, { autoRespondToAudio: false });
 
+    bridgeRequest?.onAudio?.(Buffer.from("native-direct-audio"));
+    bridgeRequest?.onTranscript?.("assistant", "native direct answer", true);
+    expect(
+      events.some((entry) => {
+        const payload = entry.payload;
+        return (
+          typeof payload === "object" &&
+          payload !== null &&
+          (payload as Record<string, unknown>).type === "audio"
+        );
+      }),
+    ).toBe(false);
+    expect(
+      events.some((entry) => {
+        const payload = entry.payload;
+        return (
+          typeof payload === "object" &&
+          payload !== null &&
+          (payload as Record<string, unknown>).type === "transcript" &&
+          (payload as Record<string, unknown>).role === "assistant"
+        );
+      }),
+    ).toBe(false);
+
     bridgeRequest?.onTranscript?.("user", "Can you check this?", true);
     expect(bridge.sendUserMessage).not.toHaveBeenCalledWith("Can you check this?");
 
@@ -728,10 +752,7 @@ describe("talk realtime gateway relay", () => {
     expectRecordFields((forcedToolCall.talkEvent as Record<string, unknown>).payload, {
       forced: true,
     });
-    expect(bridge.handleBargeIn).toHaveBeenCalledWith({
-      audioPlaybackActive: true,
-      force: true,
-    });
+    expect(bridge.handleBargeIn).not.toHaveBeenCalled();
 
     const callId = String(forcedToolCall.callId);
     submitTalkRealtimeRelayToolResult({
@@ -784,6 +805,17 @@ describe("talk realtime gateway relay", () => {
         "Here is the checked answer.",
       ].join("\n"),
     );
+    bridgeRequest?.onAudio?.(Buffer.from("forced-consult-audio"));
+    const forcedConsultAudio = findEventPayload(
+      events,
+      (payload) =>
+        payload.type === "audio" &&
+        payload.audioBase64 === Buffer.from("forced-consult-audio").toString("base64"),
+    );
+    expectRecordFields(forcedConsultAudio, {
+      relaySessionId: session.relaySessionId,
+      type: "audio",
+    });
     expect(
       bridge.submitToolResult.mock.invocationCallOrder[
         bridge.submitToolResult.mock.invocationCallOrder.length - 1
@@ -1173,6 +1205,56 @@ describe("talk realtime gateway relay", () => {
     });
 
     expect(commitAudioTurn).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an empty provider commit error as a committed next turn", async () => {
+    let bridgeRequest: RealtimeVoiceBridgeCreateRequest | undefined;
+    const commitAudioTurn = vi.fn();
+    const provider: RealtimeVoiceProviderPlugin = {
+      id: "relay-test",
+      label: "Relay Test",
+      isConfigured: () => true,
+      createBridge: (req) => {
+        bridgeRequest = req;
+        return {
+          connect: vi.fn(async () => undefined),
+          sendAudio: vi.fn(),
+          commitAudioTurn,
+          setMediaTimestamp: vi.fn(),
+          handleBargeIn: vi.fn(),
+          submitToolResult: vi.fn(),
+          acknowledgeMark: vi.fn(),
+          close: vi.fn(),
+          isConnected: vi.fn(() => true),
+        };
+      },
+    };
+    const session = await createTalkRealtimeRelaySession({
+      context: { broadcastToConnIds: vi.fn() } as never,
+      connId: "conn-1",
+      provider,
+      providerConfig: {},
+      instructions: "brief",
+      tools: [],
+    });
+
+    bridgeRequest?.onError?.(
+      new Error(
+        "Error committing input audio buffer: buffer too small. Expected at least 100ms of audio, but buffer only has 0.00ms of audio.",
+      ),
+    );
+    sendTalkRealtimeRelayAudio({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+      audioBase64: Buffer.alloc(4_800, 1).toString("base64"),
+    });
+    endTalkRealtimeRelayTurn({
+      relaySessionId: session.relaySessionId,
+      connId: "conn-1",
+      turnId: "turn-1",
+    });
+
+    expect(commitAudioTurn).toHaveBeenCalledTimes(1);
   });
 
   it("correlates output audio with the active relay turn", async () => {
