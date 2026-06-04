@@ -47,6 +47,12 @@ dated diagnostic logs for active slices.
 
 - Anchor issue: <https://github.com/openclaw/openclaw/issues/78725>
 - Branch: `clawtalk/tomatenmauer-realtime-talk-triage`
+- Draft PR: <https://github.com/Jarvis-Level42/openclaw/pull/14>
+- Current coordination commit: `4dec2257bb589565bbc59001d28db78a85d195ba`
+  (`docs: track tomatenmauer talk triage`).
+- Code baseline for diagnostics: `origin/clawtalk/base` at
+  `907df590dbc6ed7ae9574410500bed80daa33bad`
+  (`fix(talk): tolerate relay commit races`).
 - Diagnostic log: `docs/diagnostics/realtime-talk-tomatenmauer-2026-06-04.md`
 - Current next action: capture a sanitized timeline for one failing Talk turn on
   Tomatenmauer, covering transcript receipt, agent response production,
