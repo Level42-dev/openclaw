@@ -18,6 +18,8 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  HAS_GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY != '' }}
+  HAS_GH_APP_PRIVATE_KEY_FALLBACK: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK != '' }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
@@ -29,30 +31,32 @@ jobs:
   label:
     permissions:
       contents: read
+      issues: write
       pull-requests: write
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/create-github-app-token@v3
         id: app-token
+        if: env.HAS_GH_APP_PRIVATE_KEY == 'true'
         continue-on-error: true
         with:
           app-id: "2729701"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: actions/create-github-app-token@v3
         id: app-token-fallback
-        if: steps.app-token.outcome == 'failure'
+        if: steps.app-token.outcome != 'success' && env.HAS_GH_APP_PRIVATE_KEY_FALLBACK == 'true'
         with:
           app-id: "2971289"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK }}
       - uses: actions/labeler@v6
         with:
           configuration-path: .github/labeler.yml
-          repo-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          repo-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           sync-labels: true
       - name: Apply PR size label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const pullRequest = context.payload.pull_request;
             if (!pullRequest) {
@@ -141,7 +145,7 @@ jobs:
       - name: Apply maintainer or trusted-contributor label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const login = context.payload.pull_request?.user?.login;
             if (!login) {
@@ -163,9 +167,10 @@ jobs:
               });
               isMaintainer = membership?.data?.state === "active";
             } catch (error) {
-              if (error?.status !== 404) {
+              if (![403, 404].includes(error?.status)) {
                 throw error;
               }
+              core.info(`Skipping maintainer team lookup for ${login}; token cannot read the maintainer team.`);
             }
 
             if (isMaintainer) {
@@ -212,7 +217,7 @@ jobs:
       - name: Apply beta-blocker title label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const pullRequest = context.payload.pull_request;
             if (!pullRequest) {
@@ -265,7 +270,7 @@ jobs:
       - name: Apply too-many-prs label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const pullRequest = context.payload.pull_request;
             if (!pullRequest) {
@@ -306,9 +311,10 @@ jobs:
                     name: activePrLimitLabel,
                   });
                 } catch (error) {
-                  if (error?.status !== 404) {
+                  if (![403, 404].includes(error?.status)) {
                     throw error;
                   }
+                  core.info(`Skipping maintainer team lookup for ${login}; token cannot read the maintainer team.`);
                 }
               }
               core.info(`Skipping active PR limit for GitHub App author ${authorLogin}.`);
@@ -463,25 +469,27 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
+      issues: write
       pull-requests: write
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/create-github-app-token@v3
         id: app-token
+        if: env.HAS_GH_APP_PRIVATE_KEY == 'true'
         continue-on-error: true
         with:
           app-id: "2729701"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: actions/create-github-app-token@v3
         id: app-token-fallback
-        if: steps.app-token.outcome == 'failure'
+        if: steps.app-token.outcome != 'success' && env.HAS_GH_APP_PRIVATE_KEY_FALLBACK == 'true'
         with:
           app-id: "2971289"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK }}
       - name: Backfill PR labels
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -558,9 +566,10 @@ jobs:
                 });
                 isMaintainer = membership?.data?.state === "active";
               } catch (error) {
-                if (error?.status !== 404) {
+                if (![403, 404].includes(error?.status)) {
                   throw error;
                 }
+                core.info(`Skipping maintainer team lookup for ${login}; token cannot read the maintainer team.`);
               }
 
               if (isMaintainer) {
@@ -767,20 +776,21 @@ jobs:
     steps:
       - uses: actions/create-github-app-token@v3
         id: app-token
+        if: env.HAS_GH_APP_PRIVATE_KEY == 'true'
         continue-on-error: true
         with:
           app-id: "2729701"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: actions/create-github-app-token@v3
         id: app-token-fallback
-        if: steps.app-token.outcome == 'failure'
+        if: steps.app-token.outcome != 'success' && env.HAS_GH_APP_PRIVATE_KEY_FALLBACK == 'true'
         with:
           app-id: "2971289"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK }}
       - name: Apply maintainer or trusted-contributor label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const login = context.payload.issue?.user?.login;
             if (!login) {
@@ -802,9 +812,10 @@ jobs:
               });
               isMaintainer = membership?.data?.state === "active";
             } catch (error) {
-              if (error?.status !== 404) {
+              if (![403, 404].includes(error?.status)) {
                 throw error;
               }
+              core.info(`Skipping maintainer team lookup for ${login}; token cannot read the maintainer team.`);
             }
 
             if (isMaintainer) {
@@ -851,7 +862,7 @@ jobs:
       - name: Apply beta-blocker title label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const issue = context.payload.issue;
             if (!issue || issue.pull_request) {
