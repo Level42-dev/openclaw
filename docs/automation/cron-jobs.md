@@ -475,6 +475,7 @@ openclaw webhooks gmail setup --account openclaw@gmail.com
 ```
 
 This writes `hooks.gmail` config, enables the Gmail preset, and defaults to Tailscale Funnel for the push endpoint (`--tailscale funnel|serve|off`).
+For GitHub notification emails, the Gmail preset routes related Discussion, issue, and pull request notifications to one `github:<owner>/<repo>:<discussion|issue|pr>:<number>` session lane while keeping individual Gmail retry ids separate.
 
 ### Gateway auto-start
 

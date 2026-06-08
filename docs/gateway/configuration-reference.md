@@ -734,7 +734,7 @@ See [Multiple Gateways](/gateway/multiple-gateways).
     maxBodyBytes: 262144,
     defaultSessionKey: "hook:ingress",
     allowRequestSessionKey: true,
-    allowedSessionKeyPrefixes: ["hook:", "hook:gmail:"],
+    allowedSessionKeyPrefixes: ["hook:", "hook:gmail:", "github:"],
     allowedAgentIds: ["hooks", "main"],
     presets: ["gmail"],
     transformsDir: "~/.openclaw/hooks/transforms",
@@ -796,8 +796,9 @@ Validation and safety notes:
 
 ### Gmail integration
 
-- The built-in Gmail preset uses `sessionKey: "hook:gmail:{{messages[0].id}}"`.
-- If you keep that per-message routing, set `hooks.allowRequestSessionKey: true` and constrain `hooks.allowedSessionKeyPrefixes` to match the Gmail namespace, for example `["hook:", "hook:gmail:"]`.
+- The built-in Gmail preset uses `sessionKey: "hook:gmail:{{messages[0].id}}"` for ordinary mail.
+- GitHub notification emails that contain a Discussion, issue, or pull request URL are routed to canonical topic lanes before dispatch: `github:<owner>/<repo>:discussion:<number>`, `github:<owner>/<repo>:issue:<number>`, or `github:<owner>/<repo>:pr:<number>`. Distinct Gmail message ids and retry idempotency keys remain separate from that topic lane.
+- Set `hooks.allowRequestSessionKey: true` and include both Gmail and GitHub namespaces in `hooks.allowedSessionKeyPrefixes`, for example `["hook:", "hook:gmail:", "github:"]`.
 - If you need `hooks.allowRequestSessionKey: false`, override the preset with a static `sessionKey` instead of the templated default.
 
 ```json5

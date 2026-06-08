@@ -5,6 +5,7 @@ import {
   buildDefaultHookUrl,
   buildGogWatchServeLogArgs,
   buildTopicPath,
+  mergeGmailHookSessionKeyPrefixes,
   parseTopicPath,
   resolveGmailHookRuntimeConfig,
 } from "./gmail.js";
@@ -67,6 +68,15 @@ describe("gmail hook config", () => {
       projectId: "proj",
       topicName: "topic",
     });
+  });
+
+  it("adds Gmail and GitHub topic lane prefixes for setup config", () => {
+    expect(mergeGmailHookSessionKeyPrefixes(["agent:", "hook:gmail:"])).toEqual([
+      "agent:",
+      "hook:gmail:",
+      "hook:",
+      "github:",
+    ]);
   });
 
   it("resolves runtime config with defaults", () => {

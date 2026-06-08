@@ -217,6 +217,52 @@ describe("hooks mapping", () => {
     }
   });
 
+  it.each([
+    [
+      "discussion",
+      "https://github.com/DerFlash/openclaw-jarvis-setup/discussions/16#discussioncomment-17200740",
+      "github:derflash/openclaw-jarvis-setup:discussion:16",
+    ],
+    [
+      "issue",
+      "https://github.com/DerFlash/openclaw-jarvis-setup/issues/22#issuecomment-4646606575",
+      "github:derflash/openclaw-jarvis-setup:issue:22",
+    ],
+    [
+      "pr",
+      "https://github.com/DerFlash/openclaw-jarvis-setup/pull/24#pullrequestreview-1",
+      "github:derflash/openclaw-jarvis-setup:pr:24",
+    ],
+  ])("routes GitHub %s Gmail notifications by canonical topic", async (_, url, expected) => {
+    const mappings = resolveHookMappings({
+      mappings: [
+        {
+          id: "gmail-topic",
+          match: { path: "gmail" },
+          action: "agent",
+          messageTemplate: "Subject: {{messages[0].subject}}",
+          sessionKey: "hook:gmail:{{messages[0].id}}",
+        },
+      ],
+    });
+    const topicResult = await applyHookMappings(mappings, {
+      payload: {
+        source: "gmail",
+        messages: [
+          {
+            id: "msg-topic",
+            subject: "[DerFlash/openclaw-jarvis-setup] Topic update",
+            body: `GitHub notification: ${url}`,
+          },
+        ],
+      },
+      headers: {},
+      url: baseUrl,
+      path: "gmail",
+    });
+    expectAgentSessionKey(topicResult, { sessionKey: expected, sessionKeySource: "templated" });
+  });
+
   it("marks literal session keys as static", async () => {
     const result = await applyGmailMappings({
       mappings: [

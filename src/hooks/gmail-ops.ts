@@ -39,6 +39,7 @@ import {
   type GmailHookOverrides,
   type GmailHookRuntimeConfig,
   generateHookToken,
+  mergeGmailHookSessionKeyPrefixes,
   mergeHookPresets,
   normalizeHooksPath,
   normalizeServePath,
@@ -209,6 +210,10 @@ export async function runGmailSetup(opts: GmailSetupOptions) {
       path: hooksPath,
       token: hookToken,
       presets: mergeHookPresets(baseConfig.hooks?.presets, "gmail"),
+      allowRequestSessionKey: true,
+      allowedSessionKeyPrefixes: mergeGmailHookSessionKeyPrefixes(
+        baseConfig.hooks?.allowedSessionKeyPrefixes,
+      ),
       gmail: {
         ...baseConfig.hooks?.gmail,
         account: opts.account,

@@ -78,6 +78,14 @@ export function mergeHookPresets(existing: string[] | undefined, preset: string)
   return Array.from(next);
 }
 
+export function mergeGmailHookSessionKeyPrefixes(existing: string[] | undefined): string[] {
+  const next = new Set(normalizeUniqueStringEntries(existing));
+  next.add("hook:");
+  next.add("hook:gmail:");
+  next.add("github:");
+  return Array.from(next);
+}
+
 export function normalizeHooksPath(raw?: string): string {
   const base = raw?.trim() || DEFAULT_HOOKS_PATH;
   if (base === "/") {

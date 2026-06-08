@@ -325,6 +325,54 @@ describe("gateway server hooks", () => {
     });
   });
 
+  test("routes close Gmail GitHub notifications for the same topic onto one lane", async () => {
+    testState.hooksConfig = {
+      enabled: true,
+      token: HOOK_TOKEN,
+      allowRequestSessionKey: true,
+      allowedSessionKeyPrefixes: ["hook:", "hook:gmail:", "github:"],
+      presets: ["gmail"],
+    };
+    setMainAndHooksAgents();
+
+    const githubUrl = "https://github.com/DerFlash/openclaw-jarvis-setup/discussions/16";
+    await withGatewayServer(async ({ port }) => {
+      const postGmailNotification = (messageId: string, idempotencyKey: string) =>
+        postHook(
+          port,
+          "/hooks/gmail",
+          {
+            source: "gmail",
+            messages: [
+              {
+                id: messageId,
+                from: "notifications@github.com",
+                subject: "[DerFlash/openclaw-jarvis-setup] Discussion update",
+                snippet: `View it on GitHub: ${githubUrl}#discussioncomment-${messageId}`,
+              },
+            ],
+          },
+          { headers: { "Idempotency-Key": idempotencyKey } },
+        );
+
+      mockIsolatedRunOk();
+      const first = await postGmailNotification("msg-a", "gmail-msg-a");
+      const second = await postGmailNotification("msg-b", "gmail-msg-b");
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      const firstBody = (await first.json()) as { runId?: string };
+      const secondBody = (await second.json()) as { runId?: string };
+      expect(firstBody.runId).toBeTruthy();
+      expect(secondBody.runId).toBeTruthy();
+      expect(secondBody.runId).not.toBe(firstBody.runId);
+
+      await waitForCronIsolatedRuns(2);
+      expect(cronRunCall(0).sessionKey).toBe("github:derflash/openclaw-jarvis-setup:discussion:16");
+      expect(cronRunCall(1).sessionKey).toBe("github:derflash/openclaw-jarvis-setup:discussion:16");
+      drainSystemEvents(resolveMainKey());
+    });
+  });
+
   test("routes explicit-agent hook completion events to the target agent main session", async () => {
     testState.hooksConfig = { enabled: true, token: HOOK_TOKEN };
     setMainAndHooksAgents();
