@@ -398,6 +398,8 @@ Save to `~/.openclaw/openclaw.json` and you can DM the bot from that number.
     path: "/hooks",
     token: "shared-secret",
     presets: ["gmail"],
+    allowRequestSessionKey: true,
+    allowedSessionKeyPrefixes: ["hook:", "hook:gmail:", "github:"],
     transformsDir: "~/.openclaw/hooks/transforms",
     mappings: [
       {
