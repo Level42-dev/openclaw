@@ -68,6 +68,7 @@ type HookAction =
     };
 
 type HookSessionKeyTemplateSource = "static" | "templated";
+type GithubTopicKind = "discussion" | "issue" | "pr";
 
 type HookMappingResult =
   | { ok: true; action: HookAction }
@@ -264,6 +265,8 @@ function buildActionFromMapping(
     };
   }
   const message = renderTemplate(mapping.messageTemplate ?? "", ctx);
+  const sessionKey =
+    resolveGmailGithubTopicSessionKey(ctx) ?? renderOptional(mapping.sessionKey, ctx);
   return {
     ok: true,
     action: {
@@ -272,8 +275,8 @@ function buildActionFromMapping(
       name: renderOptional(mapping.name, ctx),
       agentId: mapping.agentId,
       wakeMode: mapping.wakeMode ?? "now",
-      sessionKey: renderOptional(mapping.sessionKey, ctx),
-      sessionKeySource: getSessionKeyTemplateSource(mapping.sessionKey),
+      sessionKey,
+      sessionKeySource: resolveSessionKeySource(mapping.sessionKey, sessionKey),
       deliver: mapping.deliver,
       allowUnsafeExternalContent: mapping.allowUnsafeExternalContent,
       channel: mapping.channel,
@@ -283,6 +286,17 @@ function buildActionFromMapping(
       timeoutSeconds: mapping.timeoutSeconds,
     },
   };
+}
+
+function resolveSessionKeySource(
+  sessionKeyTemplate: string | undefined,
+  resolvedSessionKey: string | undefined,
+): HookSessionKeyTemplateSource | undefined {
+  if (!resolvedSessionKey) {
+    return undefined;
+  }
+  const templateSource = getSessionKeyTemplateSource(sessionKeyTemplate);
+  return templateSource ?? "templated";
 }
 
 function mergeAction(
@@ -347,6 +361,94 @@ function getSessionKeyTemplateSource(
     return undefined;
   }
   return hasHookTemplateExpressions(normalizedTemplate) ? "templated" : "static";
+}
+
+function resolveGmailGithubTopicSessionKey(ctx: HookMappingContext): string | undefined {
+  if (!isGmailHookContext(ctx)) {
+    return undefined;
+  }
+  const message = readFirstGmailMessage(ctx.payload);
+  if (!message) {
+    return undefined;
+  }
+  return extractGithubTopicSessionKey(collectStringValues(message).join("\n"));
+}
+
+function isGmailHookContext(ctx: HookMappingContext): boolean {
+  const payloadSource = readStringValue(ctx.payload.source)?.trim().toLowerCase();
+  return ctx.path === "gmail" || payloadSource === "gmail";
+}
+
+function readFirstGmailMessage(payload: Record<string, unknown>): Record<string, unknown> | null {
+  const messages = payload.messages;
+  if (!Array.isArray(messages)) {
+    return null;
+  }
+  const first = messages[0];
+  return first && typeof first === "object" && !Array.isArray(first)
+    ? (first as Record<string, unknown>)
+    : null;
+}
+
+function collectStringValues(input: unknown, depth = 0): string[] {
+  if (depth > 4 || input === null || input === undefined) {
+    return [];
+  }
+  if (typeof input === "string") {
+    return [input];
+  }
+  if (typeof input !== "object") {
+    return [];
+  }
+  if (Array.isArray(input)) {
+    return input.flatMap((value) => collectStringValues(value, depth + 1));
+  }
+  const values: string[] = [];
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (BLOCKED_PATH_KEYS.has(key)) {
+      continue;
+    }
+    values.push(...collectStringValues(value, depth + 1));
+  }
+  return values;
+}
+
+function extractGithubTopicSessionKey(text: string): string | undefined {
+  const topic = extractGithubTopic(text);
+  return topic
+    ? `github:${topic.owner}/${topic.repo}:${topic.kind}:${topic.number}`.toLowerCase()
+    : undefined;
+}
+
+function extractGithubTopic(
+  text: string,
+): { owner: string; repo: string; kind: GithubTopicKind; number: string } | undefined {
+  const re =
+    /https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/(discussions|issues|pull)\/(\d+)\b/gi;
+  let match = re.exec(text);
+  while (match) {
+    const [, owner, repo, rawKind, number] = match;
+    const kind = normalizeGithubTopicKind(rawKind);
+    if (owner && repo && kind && number) {
+      return { owner, repo, kind, number };
+    }
+    match = re.exec(text);
+  }
+  return undefined;
+}
+
+function normalizeGithubTopicKind(raw: string | undefined): GithubTopicKind | undefined {
+  const normalized = raw?.toLowerCase();
+  if (normalized === "discussions") {
+    return "discussion";
+  }
+  if (normalized === "issues") {
+    return "issue";
+  }
+  if (normalized === "pull") {
+    return "pr";
+  }
+  return undefined;
 }
 
 function resolveMergedSessionKeySource(
