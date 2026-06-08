@@ -71,9 +71,10 @@ function serializeFrameField(name: "payload" | "stateVersion", value: unknown): 
 }
 
 function hasEventScope(client: GatewayWsClient, event: string): boolean {
+  const clientInfo = client.connect.client;
   if (
-    (client.connect.client.platform === "esp32-s3" ||
-      client.connect.client.deviceFamily === "voice-pe") &&
+    clientInfo &&
+    (clientInfo.platform === "esp32-s3" || clientInfo.deviceFamily === "voice-pe") &&
     !VOICE_PE_ALLOWED_EVENTS.has(event)
   ) {
     return false;
