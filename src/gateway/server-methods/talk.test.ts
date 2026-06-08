@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../config/config.js", () => ({
+  getRuntimeConfig: mocks.getRuntimeConfig,
   readConfigFileSnapshot: mocks.readConfigFileSnapshot,
 }));
 
@@ -1416,6 +1417,7 @@ describe("talk.client.toolCall handler", () => {
       respond: respond as never,
       context: {
         getRuntimeConfig: () => ({}) as OpenClawConfig,
+        logGateway: { warn: vi.fn() },
       } as never,
     });
 

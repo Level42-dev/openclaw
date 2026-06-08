@@ -46,6 +46,7 @@ import {
 import { abortChatRunById } from "./chat-abort.js";
 import { resolveConfiguredSecretInputString } from "./resolve-configured-secret-input-string.js";
 import type { GatewayRequestContext } from "./server-methods/shared-types.js";
+import { loadStartTalkRealtimeAgentConsult } from "./talk-agent-consult-loader.js";
 import {
   closeExpiredTalkRelaySessions,
   requireActiveTalkRelaySession,
@@ -913,7 +914,7 @@ function scheduleForcedAgentConsult(session: RelaySession | undefined, question:
       }),
     });
     try {
-      const { startTalkRealtimeAgentConsult } = await import("./talk-agent-consult.js");
+      const startTalkRealtimeAgentConsult = await loadStartTalkRealtimeAgentConsult();
       const result = await startTalkRealtimeAgentConsult({
         context: session.context,
         client: null,

@@ -19,7 +19,7 @@ import {
 import { REALTIME_VOICE_AGENT_CONTROL_TOOL } from "../../talk/agent-run-control-shared.js";
 import { controlRealtimeVoiceAgentRun } from "../../talk/agent-run-control.js";
 import { resolveConfiguredRealtimeVoiceProvider } from "../../talk/provider-resolver.js";
-import { startTalkRealtimeAgentConsult } from "../talk-agent-consult.js";
+import { loadStartTalkRealtimeAgentConsult } from "../talk-agent-consult-loader.js";
 import { formatForLog } from "../ws-log.js";
 import {
   buildRealtimeInstructions,
@@ -188,6 +188,7 @@ export const talkClientHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    const startTalkRealtimeAgentConsult = await loadStartTalkRealtimeAgentConsult();
     const result = await startTalkRealtimeAgentConsult({
       context: request.context,
       client: request.client,
