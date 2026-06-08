@@ -19,6 +19,7 @@ import { readSpeakableRealtimeVoiceToolResult } from "../talk/consult-question.j
 import {
   createRealtimeVoiceForcedConsultCoordinator,
   type RealtimeVoiceForcedConsultCoordinator,
+  type RealtimeVoiceForcedConsultHandle,
 } from "../talk/forced-consult-coordinator.js";
 import { recordTalkObservabilityEvent } from "../talk/observability.js";
 import {
@@ -879,86 +880,90 @@ function scheduleForcedAgentConsult(session: RelaySession | undefined, question:
   if (!handle) {
     return;
   }
-  session.forcedConsults.schedule(handle, FORCED_CONSULT_FALLBACK_DELAY_MS, async () => {
-    if (!relaySessions.has(session.id)) {
-      return;
-    }
-    const turnId = ensureRelayTurn(session);
-    const callId = handle.id;
-    const itemId = `forced-consult-item-${randomUUID()}`;
-    const args = {
-      question: handle.question,
-      context:
-        "The realtime provider produced a final user transcript without invoking openclaw_agent_consult, so OpenClaw is forcing the consult for realtime Talk.",
-      responseStyle: "Reply in a concise spoken tone.",
-    };
-    session.forcedConsults.markStarted(handle);
-    broadcastToOwner(session.context, session.connId, {
-      relaySessionId: session.id,
-      type: "toolCall",
-      itemId,
-      callId,
-      name: REALTIME_VOICE_AGENT_CONSULT_TOOL_NAME,
-      forced: true,
-      args,
-      talkEvent: session.talk.emit({
-        type: "tool.call",
-        itemId,
-        callId,
-        turnId,
-        payload: {
-          name: REALTIME_VOICE_AGENT_CONSULT_TOOL_NAME,
-          args: { question: handle.question },
-          forced: true,
-        },
-      }),
-    });
-    try {
-      const startTalkRealtimeAgentConsult = await loadStartTalkRealtimeAgentConsult();
-      const result = await startTalkRealtimeAgentConsult({
-        context: session.context,
-        client: null,
-        isWebchatConnect: () => false,
-        requestId: `talk-relay-forced-consult:${session.id}`,
-        sessionKey: session.sessionKey ?? DEFAULT_GATEWAY_RELAY_SESSION_KEY,
-        callId,
-        args,
-        relaySessionId: session.id,
-        connId: session.connId,
-      });
-      if (!result.ok) {
-        relayLogger.warn(
-          { relaySessionId: session.id, connId: session.connId, error: result.error.message },
-          "forced realtime relay agent consult failed",
-        );
-        try {
-          submitTalkRealtimeRelayToolResult({
-            relaySessionId: session.id,
-            connId: session.connId,
-            callId,
-            result: { error: result.error.message },
-          });
-        } catch (error: unknown) {
-          relayLogger.warn(
-            { relaySessionId: session.id, connId: session.connId, error: formatError(error) },
-            "forced realtime relay agent consult failure result submit failed",
-          );
-        }
-      }
-    } catch (error: unknown) {
-      relayLogger.warn(
-        { relaySessionId: session.id, connId: session.connId, error: formatError(error) },
-        "forced realtime relay agent consult failed",
-      );
-    }
+  session.forcedConsults.schedule(handle, FORCED_CONSULT_FALLBACK_DELAY_MS, () => {
+    void runForcedAgentConsult(session, handle);
   });
 }
 
+async function runForcedAgentConsult(
+  session: RelaySession,
+  handle: RealtimeVoiceForcedConsultHandle,
+): Promise<void> {
+  if (!relaySessions.has(session.id)) {
+    return;
+  }
+  const turnId = ensureRelayTurn(session);
+  const callId = handle.id;
+  const itemId = `forced-consult-item-${randomUUID()}`;
+  const args = {
+    question: handle.question,
+    context:
+      "The realtime provider produced a final user transcript without invoking openclaw_agent_consult, so OpenClaw is forcing the consult for realtime Talk.",
+    responseStyle: "Reply in a concise spoken tone.",
+  };
+  session.forcedConsults.markStarted(handle);
+  broadcastToOwner(session.context, session.connId, {
+    relaySessionId: session.id,
+    type: "toolCall",
+    itemId,
+    callId,
+    name: REALTIME_VOICE_AGENT_CONSULT_TOOL_NAME,
+    forced: true,
+    args,
+    talkEvent: session.talk.emit({
+      type: "tool.call",
+      itemId,
+      callId,
+      turnId,
+      payload: {
+        name: REALTIME_VOICE_AGENT_CONSULT_TOOL_NAME,
+        args: { question: handle.question },
+        forced: true,
+      },
+    }),
+  });
+  try {
+    const startTalkRealtimeAgentConsult = await loadStartTalkRealtimeAgentConsult();
+    const result = await startTalkRealtimeAgentConsult({
+      context: session.context,
+      client: null,
+      isWebchatConnect: () => false,
+      requestId: `talk-relay-forced-consult:${session.id}`,
+      sessionKey: session.sessionKey ?? DEFAULT_GATEWAY_RELAY_SESSION_KEY,
+      callId,
+      args,
+      relaySessionId: session.id,
+      connId: session.connId,
+    });
+    if (!result.ok) {
+      relayLogger.warn(
+        { relaySessionId: session.id, connId: session.connId, error: result.error.message },
+        "forced realtime relay agent consult failed",
+      );
+      try {
+        submitTalkRealtimeRelayToolResult({
+          relaySessionId: session.id,
+          connId: session.connId,
+          callId,
+          result: { error: result.error.message },
+        });
+      } catch (error: unknown) {
+        relayLogger.warn(
+          { relaySessionId: session.id, connId: session.connId, error: formatError(error) },
+          "forced realtime relay agent consult failure result submit failed",
+        );
+      }
+    }
+  } catch (error: unknown) {
+    relayLogger.warn(
+      { relaySessionId: session.id, connId: session.connId, error: formatError(error) },
+      "forced realtime relay agent consult failed",
+    );
+  }
+}
+
 function shouldSuppressNativeRelayAssistantOutput(session: RelaySession | undefined): boolean {
-  return (
-    session?.forceAgentConsultOnFinalTranscript === true &&
-    session.forcedConsultSpeechActive !== true
-  );
+  return session?.forceAgentConsultOnFinalTranscript === true && !session.forcedConsultSpeechActive;
 }
 
 function submitAlreadyDeliveredToolResult(
