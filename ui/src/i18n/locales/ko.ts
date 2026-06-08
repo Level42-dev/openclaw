@@ -893,6 +893,13 @@ export const ko: TranslationMap = {
       whisperingVectorStore: "벡터 저장소에 속삭이는 중…",
     },
   },
+  skillWorkshop: {
+    viewLabel: "Workshop view",
+    boardView: "Board view",
+    todayView: "Today view",
+    board: "Board",
+    today: "Today",
+  },
   usage: {
     common: {
       emptyValue: "—",

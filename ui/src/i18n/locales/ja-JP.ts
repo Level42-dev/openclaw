@@ -897,6 +897,13 @@ export const ja_JP: TranslationMap = {
       whisperingVectorStore: "ベクトルストアにささやきかけ中…",
     },
   },
+  skillWorkshop: {
+    viewLabel: "Workshop view",
+    boardView: "Board view",
+    todayView: "Today view",
+    board: "Board",
+    today: "Today",
+  },
   usage: {
     common: {
       emptyValue: "—",

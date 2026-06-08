@@ -894,6 +894,13 @@ export const vi: TranslationMap = {
       whisperingVectorStore: "đang thì thầm với vector store…",
     },
   },
+  skillWorkshop: {
+    viewLabel: "Workshop view",
+    boardView: "Board view",
+    todayView: "Today view",
+    board: "Board",
+    today: "Today",
+  },
   usage: {
     common: {
       emptyValue: "—",

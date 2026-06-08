@@ -884,6 +884,13 @@ export const zh_CN: TranslationMap = {
       whisperingVectorStore: "正在向向量存储轻声低语…",
     },
   },
+  skillWorkshop: {
+    viewLabel: "Workshop view",
+    boardView: "Board view",
+    todayView: "Today view",
+    board: "Board",
+    today: "Today",
+  },
   usage: {
     common: {
       emptyValue: "—",

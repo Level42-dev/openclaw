@@ -898,6 +898,13 @@ export const nl: TranslationMap = {
       whisperingVectorStore: "fluisteren tegen de vector store…",
     },
   },
+  skillWorkshop: {
+    viewLabel: "Workshop view",
+    boardView: "Board view",
+    todayView: "Today view",
+    board: "Board",
+    today: "Today",
+  },
   usage: {
     common: {
       emptyValue: "—",

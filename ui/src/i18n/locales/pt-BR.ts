@@ -895,6 +895,13 @@ export const pt_BR: TranslationMap = {
       whisperingVectorStore: "sussurrando para o vector store…",
     },
   },
+  skillWorkshop: {
+    viewLabel: "Workshop view",
+    boardView: "Board view",
+    todayView: "Today view",
+    board: "Board",
+    today: "Today",
+  },
   usage: {
     common: {
       emptyValue: "—",

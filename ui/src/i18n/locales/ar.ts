@@ -888,6 +888,13 @@ export const ar: TranslationMap = {
       whisperingVectorStore: "جارٍ الهمس إلى مخزن المتجهات…",
     },
   },
+  skillWorkshop: {
+    viewLabel: "Workshop view",
+    boardView: "Board view",
+    todayView: "Today view",
+    board: "Board",
+    today: "Today",
+  },
   usage: {
     common: {
       emptyValue: "—",
