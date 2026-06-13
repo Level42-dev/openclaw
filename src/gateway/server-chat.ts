@@ -1,3 +1,6 @@
+// Gateway chat runtime projects agent events into chat/session subscriber
+// streams, lifecycle persistence, heartbeat visibility, and live UI updates.
+import { performance } from "node:perf_hooks";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { resolveToolSearchCodeDisplayTarget } from "../agents/tool-display-common.js";
 import { DEFAULT_HEARTBEAT_ACK_MAX_CHARS, stripHeartbeatToken } from "../auto-reply/heartbeat.js";
@@ -7,6 +10,7 @@ import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-event
 import { detectErrorKind, type ErrorKind } from "../infra/errors.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
 import { isAcpSessionKey, isSubagentSessionKey } from "../sessions/session-key-utils.js";
+import { resolveAssistantEventPhase } from "../shared/chat-message-content.js";
 import { setSafeTimeout } from "../utils/timer-delay.js";
 import {
   normalizeLiveAssistantEventText,
@@ -16,6 +20,7 @@ import {
 } from "./live-chat-projector.js";
 import type {
   BufferedAgentEvent,
+  ChatRunEntry,
   ChatRunState,
   SessionEventSubscriberRegistry,
   SessionMessageSubscriberRegistry,
@@ -128,6 +133,19 @@ function shouldHideHeartbeatChatOutput(runId: string, sourceRunId?: string): boo
 
 function shouldSuppressHeartbeatToolEvents(runId: string, sourceRunId?: string): boolean {
   return Boolean(resolveHeartbeatContext(runId, sourceRunId)?.isHeartbeat);
+}
+
+function shouldMirrorAssistantEventToHiddenSessionMessages(data: unknown): boolean {
+  if (!data || typeof data !== "object") {
+    return false;
+  }
+  const record = data as { text?: unknown; delta?: unknown };
+  const hasText = typeof record.text === "string" && record.text.length > 0;
+  const hasDelta = typeof record.delta === "string" && record.delta.length > 0;
+  if (!hasText && !hasDelta) {
+    return false;
+  }
+  return resolveAssistantEventPhase(data) === "commentary";
 }
 
 function normalizeHeartbeatChatFinalText(params: {
@@ -254,6 +272,10 @@ export type AgentEventHandlerOptions = {
     sessionKey: string;
   }) => void;
 };
+
+function roundedChatSendTimingMs(value: number): number {
+  return Math.max(0, Math.round(value * 1000) / 1000);
+}
 
 export function createAgentEventHandler({
   broadcast,
@@ -444,6 +466,33 @@ export function createAgentEventHandler({
     }
   };
 
+  const emitFirstAssistantChatSendTiming = (chatLink: ChatRunEntry | undefined) => {
+    const timing = chatLink?.chatSendTiming;
+    if (!timing || timing.firstAssistantEventSent) {
+      return;
+    }
+    timing.firstAssistantEventSent = true;
+    const nowMs = performance.now();
+    broadcastToConnIds(
+      "chat.send_timing",
+      {
+        phase: "first-assistant-event",
+        runId: chatLink.clientRunId,
+        sessionKey: chatLink.sessionKey,
+        ...(chatLink.agentId ? { agentId: chatLink.agentId } : {}),
+        ackToPhaseMs: roundedChatSendTimingMs(nowMs - timing.ackedAtMs),
+        receivedToPhaseMs: roundedChatSendTimingMs(nowMs - timing.receivedAtMs),
+        ...(timing.dispatchStartedAtMs !== undefined
+          ? {
+              dispatchStartedToPhaseMs: roundedChatSendTimingMs(nowMs - timing.dispatchStartedAtMs),
+            }
+          : {}),
+      },
+      new Set([timing.connId]),
+      { dropIfSlow: true },
+    );
+  };
+
   const finalizeLifecycleEvent = (evt: AgentEventPayload, opts?: TerminalLifecycleOptions) => {
     const lifecyclePhase =
       evt.stream === "lifecycle" && typeof evt.data?.phase === "string" ? evt.data.phase : null;
@@ -494,7 +543,11 @@ export function createAgentEventHandler({
               evt.data?.error,
               evtStopReason,
               evtErrorKind,
-              { agentId: finished.agentId, controlUiVisible: isControlUiVisible },
+              {
+                agentId: finished.agentId,
+                controlUiVisible: isControlUiVisible,
+                firstAssistantTimingEntry: finished,
+              },
             );
           }
         } else if (!(opts?.skipChatErrorFinal && lifecyclePhase === "error")) {
@@ -630,6 +683,7 @@ export function createAgentEventHandler({
         timestamp: now,
       },
     };
+    emitFirstAssistantChatSendTiming(chatRunState.registry.peek(sourceRunId));
     sendChatPayload(sessionKey, payload, {
       agentId,
       controlUiVisible: opts?.controlUiVisible ?? true,
@@ -665,7 +719,7 @@ export function createAgentEventHandler({
     clientRunId: string,
     sourceRunId: string,
     seq: number,
-    opts?: { controlUiVisible?: boolean },
+    opts?: { controlUiVisible?: boolean; firstAssistantTimingEntry?: ChatRunEntry },
   ) => {
     const { text, shouldSuppressSilent } = resolveBufferedChatTextState(clientRunId, sourceRunId, {
       suppressLeadFragments: true,
@@ -702,6 +756,9 @@ export function createAgentEventHandler({
         timestamp: now,
       },
     };
+    emitFirstAssistantChatSendTiming(
+      opts?.firstAssistantTimingEntry ?? chatRunState.registry.peek(sourceRunId),
+    );
     sendChatPayload(sessionKey, flushPayload, {
       agentId,
       controlUiVisible: opts?.controlUiVisible ?? true,
@@ -738,7 +795,11 @@ export function createAgentEventHandler({
     error?: unknown,
     stopReason?: string,
     errorKind?: ErrorKind,
-    opts?: { agentId?: string; controlUiVisible?: boolean },
+    opts?: {
+      agentId?: string;
+      controlUiVisible?: boolean;
+      firstAssistantTimingEntry?: ChatRunEntry;
+    },
   ) => {
     const { text, shouldSuppressSilent } = resolveBufferedChatTextState(clientRunId, sourceRunId, {
       suppressLeadFragments: false,
@@ -1140,6 +1201,18 @@ export function createAgentEventHandler({
             );
           }
         }
+      } else if (
+        !isAborted &&
+        sessionKey &&
+        hasSessionMessageSubscribers &&
+        evt.stream === "assistant" &&
+        shouldMirrorAssistantEventToHiddenSessionMessages(evt.data)
+      ) {
+        sendAgentPayload(
+          sessionKey,
+          { ...agentPayload, ...buildSessionEventSnapshot(sessionKey, undefined, sessionAgentId) },
+          { agentId: sessionAgentId, controlUiVisible: false, dropIfSlow: true },
+        );
       }
     }
 
@@ -1185,7 +1258,11 @@ export function createAgentEventHandler({
     if (lifecyclePhase === "error") {
       clearBufferedChatState(clientRunId);
       const skipChatErrorFinal = isChatSendRunActive(evt.runId) && !chatLink;
-      if (isAborted || lifecycleErrorRetryGraceMs <= 0) {
+      const isFallbackExhaustedFailure = evt.data?.fallbackExhaustedFailure === true;
+      // Per-attempt provider errors keep the retry grace so fallback can reuse
+      // the runId. Once the runner marks fallback as exhausted, clear chat state
+      // immediately so webchat sessions do not stay in progress until the timer.
+      if (isAborted || isFallbackExhaustedFailure || lifecycleErrorRetryGraceMs <= 0) {
         finalizeLifecycleEvent(evt, { skipChatErrorFinal });
       } else {
         scheduleTerminalLifecycleError(evt, { skipChatErrorFinal });

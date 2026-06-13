@@ -1,3 +1,4 @@
+// Composes provider plugin runtime hooks with shared provider policy.
 import {
   findNormalizedProviderValue,
   normalizeProviderId,
@@ -32,6 +33,7 @@ import {
   resolveProviderHookPlugin,
   resolveProviderPluginsForHooks,
   resolveProviderRuntimePlugin,
+  wrapProviderSimpleCompletionStreamFn,
   type ProviderRuntimePluginHandle,
   wrapProviderStreamFn,
 } from "./provider-hook-runtime.js";
@@ -165,6 +167,7 @@ export {
   resolveProviderExtraParamsForTransport,
   resolveProviderFollowupFallbackRoute,
   resolveProviderRuntimePlugin,
+  wrapProviderSimpleCompletionStreamFn,
   wrapProviderStreamFn,
 };
 

@@ -1,3 +1,5 @@
+// Gateway Talk realtime relay.
+// Bridges browser Talk audio sessions with realtime voice provider plugins.
 import { randomUUID } from "node:crypto";
 import { resolveExpiresAtMsFromDurationMs } from "@openclaw/normalization-core/number-coercion";
 import type { OpenClawConfig } from "../config/types.js";
@@ -98,7 +100,16 @@ type TalkRealtimeRelayEventPayload =
     }
   | { relaySessionId: string; type: "toolResult"; callId: string }
   | { relaySessionId: string; type: "toolProgress"; result: RealtimeVoiceAgentControlResult }
-  | { relaySessionId: string; type: "error"; message: string }
+  | {
+      relaySessionId: string;
+      type: "error";
+      message: string;
+      code?: "realtime_unavailable";
+      provider?: string;
+      model?: string;
+      transport?: "gateway-relay";
+      phase?: string;
+    }
   | { relaySessionId: string; type: "close"; reason: "completed" | "error" };
 
 type TalkRealtimeRelayEvent = TalkRealtimeRelayEventPayload & { talkEvent?: TalkEvent };
@@ -122,6 +133,15 @@ type RelaySession = {
   providerAutoRespondsToAudio: boolean;
   forceAgentConsultOnFinalTranscript: boolean;
   forcedConsultSpeechActive: boolean;
+};
+
+type TalkRealtimeRelayIssue = {
+  code: "realtime_unavailable";
+  message: string;
+  provider: string;
+  model?: string;
+  transport: "gateway-relay";
+  phase: string;
 };
 
 type CreateTalkRealtimeRelaySessionParams = {
@@ -220,6 +240,38 @@ function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function realtimeRelayIssue(params: {
+  message: string;
+  provider: string;
+  model?: string;
+  phase: string;
+}): TalkRealtimeRelayIssue {
+  return {
+    code: "realtime_unavailable",
+    message: params.message,
+    provider: params.provider,
+    ...(params.model ? { model: params.model } : {}),
+    transport: "gateway-relay",
+    phase: params.phase,
+  };
+}
+
+function relayIssuePayload(
+  relaySessionId: string,
+  issue: TalkRealtimeRelayIssue,
+): Extract<TalkRealtimeRelayEventPayload, { type: "error" }> {
+  return {
+    relaySessionId,
+    type: "error",
+    message: issue.message,
+    code: issue.code,
+    provider: issue.provider,
+    ...(issue.model ? { model: issue.model } : {}),
+    transport: issue.transport,
+    phase: issue.phase,
+  };
+}
+
 function isWorkingToolResult(result: unknown): boolean {
   return (
     Boolean(result) &&
@@ -272,8 +324,20 @@ function broadcastToOwner(
   context: GatewayRequestContext,
   connId: string,
   event: TalkRealtimeRelayEvent,
+  options: { dropIfSlow?: boolean } = { dropIfSlow: true },
 ): void {
-  context.broadcastToConnIds(RELAY_EVENT, event, new Set([connId]), { dropIfSlow: true });
+  context.broadcastToConnIds(RELAY_EVENT, event, new Set([connId]), options);
+}
+
+function relayEventDeliveryOptions(event: TalkRealtimeRelayEventPayload): { dropIfSlow?: boolean } {
+  switch (event.type) {
+    case "ready":
+    case "error":
+    case "close":
+      return { dropIfSlow: false };
+    default:
+      return { dropIfSlow: true };
+  }
 }
 
 function abortRelayAgentRuns(session: RelaySession, reason: string): void {
@@ -340,6 +404,8 @@ function submitRelayAgentControlProviderResults(
   for (const callId of activeCallIds) {
     const forcedConsult = session.forcedConsults.handles().find((handle) => handle.id === callId);
     if (forcedConsult) {
+      // Forced consults may have both synthetic and provider-native call ids;
+      // cancelling must satisfy every native id or the provider keeps waiting.
       session.forcedConsults.markCancelled(forcedConsult);
       for (const nativeCallId of session.forcedConsults.nativeCallIds(forcedConsult)) {
         session.bridge.submitToolResult(nativeCallId, result.providerResult, {
@@ -412,6 +478,7 @@ function enforceRelaySessionLimits(connId: string): void {
   }
 }
 
+/** Creates a realtime voice relay session and returns the browser audio contract. */
 export async function createTalkRealtimeRelaySession(
   params: CreateTalkRealtimeRelaySessionParams,
 ): Promise<TalkRealtimeRelaySessionResult> {
@@ -434,12 +501,19 @@ export async function createTalkRealtimeRelaySession(
     { onEvent: recordTalkObservabilityEvent },
   );
   const emit = (event: TalkRealtimeRelayEventPayload, talkEvent?: TalkEventInput) =>
-    broadcastToOwner(params.context, params.connId, {
-      ...event,
-      ...(talkEvent ? { talkEvent: talk.emit(talkEvent) } : {}),
-    });
+    broadcastToOwner(
+      params.context,
+      params.connId,
+      {
+        ...event,
+        ...(talkEvent ? { talkEvent: talk.emit(talkEvent) } : {}),
+      },
+      relayEventDeliveryOptions(event),
+    );
   let currentOutputItemId: string | undefined;
   let currentOutputResponseId: string | undefined;
+  let ready = false;
+  let failureEmitted = false;
   const relayRef: { current?: RelaySession } = {};
   const providerConfig = await resolveRealtimeRelayProviderConfig(params);
   const bridge = createRealtimeVoiceBridgeSession({
@@ -591,6 +665,8 @@ export async function createTalkRealtimeRelaySession(
           pruneInactiveRelayAgentRuns(relay) > 0 &&
           shouldAutoControlRealtimeVoiceAgentText(question)
         ) {
+          // While an agent consult is active, short user utterances like "stop"
+          // steer the chat run instead of becoming a new consult.
           void steerTalkRealtimeRelayAgentRun({
             relaySessionId,
             connId: params.connId,
@@ -654,8 +730,10 @@ export async function createTalkRealtimeRelaySession(
         },
       );
     },
-    onReady: () =>
-      emit({ relaySessionId, type: "ready" }, { type: "session.ready", payload: null }),
+    onReady: () => {
+      ready = true;
+      emit({ relaySessionId, type: "ready" }, { type: "session.ready", payload: null });
+    },
     onError: (error) => {
       if (isEmptyProviderCommitError(error.message)) {
         const relay = relayRef.current;
@@ -669,14 +747,22 @@ export async function createTalkRealtimeRelaySession(
         );
         return;
       }
+      const issue = realtimeRelayIssue({
+        message: formatError(error),
+        provider: params.provider.id,
+        model: params.model,
+        phase: ready ? "stream" : "connect",
+      });
       relayLogger.warn(
-        { relaySessionId, connId: params.connId, providerError: error.message },
+        { relaySessionId, connId: params.connId, providerError: issue.message },
         "realtime relay provider error",
       );
-      emit(
-        { relaySessionId, type: "error", message: error.message },
-        { type: "session.error", payload: { message: error.message }, final: true },
-      );
+      failureEmitted = true;
+      emit(relayIssuePayload(relaySessionId, issue), {
+        type: "session.error",
+        payload: issue,
+        final: true,
+      });
     },
     onClose: (reason) => {
       const active = relaySessions.get(relaySessionId);
@@ -696,6 +782,19 @@ export async function createTalkRealtimeRelaySession(
       forgetUnifiedTalkSession(relaySessionId);
       clearTimeout(active.cleanupTimer);
       abortRelayAgentRuns(active, "relay-closed");
+      if (!ready && !failureEmitted) {
+        const issue = realtimeRelayIssue({
+          message: "Realtime provider closed before the session became ready.",
+          provider: params.provider.id,
+          model: params.model,
+          phase: "connect",
+        });
+        emit(relayIssuePayload(relaySessionId, issue), {
+          type: "session.error",
+          payload: issue,
+          final: true,
+        });
+      }
       emit(
         { relaySessionId, type: "close", reason },
         { type: "session.closed", payload: { reason }, final: true },
@@ -731,11 +830,22 @@ export async function createTalkRealtimeRelaySession(
   relay.cleanupTimer.unref?.();
   relaySessions.set(relaySessionId, relay);
   bridge.connect().catch((error: unknown) => {
+    const issue = realtimeRelayIssue({
+      message: formatError(error),
+      provider: params.provider.id,
+      model: params.model,
+      phase: "connect",
+    });
     relayLogger.warn(
-      { relaySessionId, connId: params.connId, providerError: formatError(error) },
+      { relaySessionId, connId: params.connId, providerError: issue.message },
       "realtime relay provider connect failed",
     );
-    emit({ relaySessionId, type: "error", message: formatError(error) });
+    failureEmitted = true;
+    emit(relayIssuePayload(relaySessionId, issue), {
+      type: "session.error",
+      payload: issue,
+      final: true,
+    });
     const active = relaySessions.get(relaySessionId);
     if (active) {
       closeRelaySession(active, "error");
@@ -924,6 +1034,7 @@ function getRelaySession(relaySessionId: string, connId: string): RelaySession {
   });
 }
 
+/** Streams one base64-encoded browser audio frame into the owning relay. */
 export function sendTalkRealtimeRelayAudio(params: {
   relaySessionId: string;
   connId: string;
@@ -1002,6 +1113,7 @@ export function endTalkRealtimeRelayTurn(params: {
   });
 }
 
+/** Delivers a tool result from the browser/client side back to the provider. */
 export function submitTalkRealtimeRelayToolResult(params: {
   relaySessionId: string;
   connId: string;
@@ -1070,6 +1182,7 @@ export function submitTalkRealtimeRelayToolResult(params: {
   });
 }
 
+/** Tracks the chat run started for a realtime agent-consult tool call. */
 export function registerTalkRealtimeRelayAgentRun(params: {
   relaySessionId: string;
   connId: string;
@@ -1087,6 +1200,7 @@ export function registerTalkRealtimeRelayAgentRun(params: {
   }
 }
 
+/** Applies realtime voice-control text to the active agent-consult chat run. */
 export async function steerTalkRealtimeRelayAgentRun(params: {
   relaySessionId: string;
   connId: string;
@@ -1129,6 +1243,7 @@ export async function steerTalkRealtimeRelayAgentRun(params: {
   return result;
 }
 
+/** Cancels the active relay turn, aborts agent work, and clears provider audio. */
 export function cancelTalkRealtimeRelayTurn(params: {
   relaySessionId: string;
   connId: string;
@@ -1151,6 +1266,7 @@ export function cancelTalkRealtimeRelayTurn(params: {
   });
 }
 
+/** Closes a realtime relay session owned by the current connection. */
 export function stopTalkRealtimeRelaySession(params: {
   relaySessionId: string;
   connId: string;
@@ -1159,6 +1275,7 @@ export function stopTalkRealtimeRelaySession(params: {
   closeRelaySession(session, "completed");
 }
 
+/** Clears process-local realtime relays between tests. */
 export function clearTalkRealtimeRelaySessionsForTest(): void {
   for (const session of relaySessions.values()) {
     session.forcedConsults.clear();

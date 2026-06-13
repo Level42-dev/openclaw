@@ -1,3 +1,5 @@
+// Gateway session reset/delete service.
+// Rotates transcripts and coordinates lifecycle cleanup across runtimes/hooks.
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -80,6 +82,8 @@ function resolveResetSessionFile(params: {
   agentId: string;
 }): string {
   const currentEntry = params.currentEntry;
+  // Preserve explicit session-file placement across reset while swapping the
+  // embedded session id, so linked runtimes keep writing beside old transcripts.
   const rewrittenSessionFile = currentEntry?.sessionId
     ? rewriteSessionFileForNewSessionId({
         sessionFile: currentEntry.sessionFile,
@@ -108,6 +112,8 @@ function stripRuntimeModelState(entry?: SessionEntry): SessionEntry | undefined 
   }
   return {
     ...entry,
+    // Reset should keep user selection preferences but drop per-run resolved
+    // model state so the next turn rehydrates from current config.
     model: undefined,
     modelProvider: undefined,
     contextTokens: undefined,
@@ -748,7 +754,7 @@ export async function performGatewaySessionReset(params: {
   reason: "new" | "reset";
   commandSource: string;
 }): Promise<
-  | { ok: true; key: string; entry: SessionEntry; agentId: string }
+  | { ok: true; key: string; entry: SessionEntry; agentId: string; storePath: string }
   | { ok: false; error: ReturnType<typeof errorShape> }
 > {
   const resetTarget = (() => {
@@ -1008,5 +1014,11 @@ export async function performGatewaySessionReset(params: {
       reason: "session-reset",
     });
   }
-  return { ok: true, key: target.canonicalKey, entry: next, agentId: target.agentId };
+  return {
+    ok: true,
+    key: target.canonicalKey,
+    entry: next,
+    agentId: target.agentId,
+    storePath,
+  };
 }

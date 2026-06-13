@@ -1,3 +1,5 @@
+// Gateway Talk realtime agent-consult bridge.
+// Starts chat.send runs that answer realtime Talk tool calls.
 import { randomUUID } from "node:crypto";
 import {
   ErrorCodes,
@@ -22,6 +24,9 @@ import { formatForLog } from "./ws-log.js";
 
 const REALTIME_AGENT_CONSULT_WAIT_TIMEOUT_MS = 35_000;
 
+/**
+ * Starts the agent-consult chat run that backs realtime Talk tool calls.
+ */
 export async function startTalkRealtimeAgentConsult(params: {
   context: GatewayRequestContext;
   client: GatewayClient | null;

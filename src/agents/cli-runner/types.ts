@@ -1,3 +1,6 @@
+/**
+ * Shared types for preparing and executing CLI-backed agent runs.
+ */
 import type { SourceReplyDeliveryMode } from "../../auto-reply/get-reply-options.types.js";
 import type { ReplyOperation } from "../../auto-reply/reply/reply-run-registry.js";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
@@ -26,6 +29,7 @@ import type {
 } from "../embedded-agent-runner/run/params.js";
 import type { SilentReplyPromptMode } from "../system-prompt.types.js";
 
+/** Input contract for one CLI-backed agent run. */
 export type RunCliAgentParams = {
   sessionId: string;
   sessionKey?: string;
@@ -42,6 +46,10 @@ export type RunCliAgentParams = {
   suppressNextUserMessagePersistence?: boolean;
   userTurnTranscriptRecorder?: UserTurnTranscriptRecorder;
   onUserMessagePersisted?: (message: PersistedUserTurnMessage) => void | Promise<void>;
+  /** Persist the successful CLI assistant reply into the OpenClaw session transcript. */
+  persistAssistantTranscript?: boolean;
+  /** Session store path used when assistant transcript persistence is enabled. */
+  storePath?: string;
   currentInboundEventKind?: InboundEventKind;
   currentInboundContext?: CurrentInboundPromptContext;
   inputProvenance?: InputProvenance;
@@ -49,6 +57,11 @@ export type RunCliAgentParams = {
   model?: string;
   thinkLevel?: ThinkLevel;
   timeoutMs: number;
+  /**
+   * Explicit run timeout, in milliseconds, when the caller can distinguish a
+   * deliberate timeout override from the inherited agent default.
+   */
+  runTimeoutOverrideMs?: number;
   runId: string;
   lane?: string;
   jobId?: string;
@@ -82,6 +95,8 @@ export type RunCliAgentParams = {
   currentMessageId?: string | number;
   currentInboundAudio?: boolean;
   agentAccountId?: string;
+  /** Sender identity for channel-originated runs when available. */
+  senderId?: string | null;
   /** Trusted sender identity bit for channel action auth. */
   senderIsOwner?: boolean;
   /** Runtime tool allow-list. CLI harnesses fail closed when this is set. */
@@ -98,6 +113,7 @@ export type RunCliAgentParams = {
     firstModelCallStarted?: boolean;
   }) => void;
   replyOperation?: ReplyOperation;
+  emitCommentaryText?: boolean;
   /**
    * Close any long-lived CLI live session created for this run after the run
    * finishes. Intended for temporary helper calls that should not keep process
@@ -112,6 +128,7 @@ export type RunCliAgentParams = {
   cleanupBundleMcpOnRunEnd?: boolean;
 };
 
+/** Backend config after MCP, skill, env, and cleanup preparation. */
 export type CliPreparedBackend = {
   backend: CliBackendConfig;
   cleanup?: () => Promise<void>;
@@ -120,6 +137,7 @@ export type CliPreparedBackend = {
   env?: Record<string, string>;
 };
 
+/** Reusable CLI session id and the reason it was rejected, when any. */
 export type CliReusableSession = {
   sessionId?: string;
   invalidatedReason?:
@@ -132,6 +150,7 @@ export type CliReusableSession = {
     | "orphaned-tool-use";
 };
 
+/** Fully prepared execution context consumed by the CLI runner executor. */
 export type PreparedCliRunContext = {
   params: RunCliAgentParams;
   effectiveAuthProfileId?: string;
