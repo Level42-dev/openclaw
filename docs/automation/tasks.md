@@ -270,7 +270,12 @@ openclaw tasks notify <lookup> state_changes
     openclaw tasks flow cancel <lookup>
     ```
 
-    Use these when the orchestrating Task Flow is the thing you care about rather than one individual background task record.
+    Use these when the orchestrating Task Flow is the thing you care about rather
+    than one individual background task record. For stale-flow cleanup, run
+    `openclaw tasks audit --json`, inspect with `show --json`, cancel only
+    non-terminal flows whose owning lane is superseded or safe to stop, and let
+    already-terminal residues age out through `openclaw tasks maintenance --json`
+    followed by `--apply`.
 
   </Accordion>
 </AccordionGroup>
