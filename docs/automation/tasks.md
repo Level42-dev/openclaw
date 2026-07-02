@@ -274,7 +274,7 @@ openclaw tasks notify <lookup> state_changes
     openclaw tasks flow cancel <lookup>
     ```
 
-    The flow lookup token accepts a flow id or owner key. Use these when the orchestrating [Task Flow](/automation/taskflow) is the thing you care about rather than one individual background task record.
+    The flow lookup token accepts a flow id or owner key. Use these when the orchestrating [Task Flow](/automation/taskflow) is the thing you care about rather than one individual background task record. For stale-flow cleanup, run `openclaw tasks audit --json`, inspect the flow with `show --json`, cancel only non-terminal flows whose owning lane is superseded or safe to stop, and let terminal residue age out through `openclaw tasks maintenance --json` followed by `--apply`.
 
   </Accordion>
 </AccordionGroup>

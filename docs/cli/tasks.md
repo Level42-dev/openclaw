@@ -82,6 +82,8 @@ Surfaces stale, lost, delivery-failed, or otherwise inconsistent task and
 Task Flow records. Lost tasks retained until `cleanupAfter` are warnings;
 expired or unstamped lost tasks are errors.
 
+For Task Flow cleanup, treat this command as the dry-run step and inspect each stale flow with `openclaw tasks flow show <lookup> --json` before mutation.
+
 `--code` accepts task codes (`stale_queued`, `stale_running`, `lost`,
 `delivery_failed`, `missing_cleanup`, `inconsistent_timestamps`) and Task
 Flow codes (`restore_failed`, `stale_waiting`, `stale_blocked`,
@@ -110,6 +112,8 @@ When applied, maintenance also prunes `cron:<jobId>:run:<uuid>` session
 registry rows older than 7 days while preserving currently running cron
 jobs and leaving non-cron session rows untouched.
 
+Terminal Task Flow records are pruned only after the retention window and only when they have no active linked tasks. Preview the Task Flow prune count with `--json`; do not remove registry state or transcripts by hand.
+
 ### `flow`
 
 ```bash
@@ -121,6 +125,7 @@ openclaw tasks flow cancel <lookup>
 Inspects or cancels durable Task Flow state under the task ledger.
 `flow list --status` accepts `queued`, `running`, `waiting`, `blocked`,
 `succeeded`, `failed`, `cancelled`, or `lost`.
+`cancel` is the supported cleanup path for stale non-terminal flows after the owning lane or operator confirms the work is superseded or safe to stop. Already-terminal flows are left for `openclaw tasks maintenance --apply` after a JSON preview.
 
 ## Related
 

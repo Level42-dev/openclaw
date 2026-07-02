@@ -18,13 +18,20 @@ openclaw tasks flow show   <lookup> [--json]
 openclaw tasks flow cancel <lookup>
 ```
 
-| Subcommand | Description                | Arguments / options                                                                   |
-| ---------- | -------------------------- | ------------------------------------------------------------------------------------- |
-| `list`     | List tracked TaskFlows.    | `--json` machine-readable output; `--status <name>` filter (see status values below). |
-| `show`     | Show one TaskFlow.         | `<lookup>` flow id or owner key; `--json` machine-readable output.                    |
-| `cancel`   | Cancel a running TaskFlow. | `<lookup>` flow id or owner key.                                                      |
+| Subcommand | Description                     | Arguments / options                                                                   |
+| ---------- | ------------------------------- | ------------------------------------------------------------------------------------- |
+| `list`     | List tracked TaskFlows.         | `--json` machine-readable output; `--status <name>` filter (see status values below). |
+| `show`     | Show one TaskFlow.              | `<lookup>` flow id or owner key; `--json` machine-readable output.                    |
+| `cancel`   | Cancel a non-terminal TaskFlow. | `<lookup>` flow id or owner key.                                                      |
 
 `<lookup>` accepts either a flow id (returned by `list` / `show`) or the flow's owner key (the stable identifier the owning subsystem uses to track the flow).
+
+For stale-flow cleanup, run `openclaw tasks audit --json` first, inspect the
+candidate with `show --json`, and cancel only if the owning issue or operator
+confirms the work is superseded or safe to stop. Already-terminal flows such as
+historical `blocked` residues are not rewritten by `cancel`; preview and apply
+`openclaw tasks maintenance --json` / `--apply` so the retention/prune path clears
+them when eligible. Do not manually delete TaskFlow state or transcripts.
 
 ### Status filter values
 

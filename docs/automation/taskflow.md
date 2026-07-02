@@ -63,6 +63,8 @@ Flow records persist in the shared SQLite state database (`~/.openclaw/state/ope
 
 `openclaw tasks flow cancel` sets a sticky cancel intent on the flow, cancels its active child tasks, and refuses new managed child tasks. Once no child task remains active, the flow finalizes as `cancelled` - immediately, or via the maintenance sweep if children take longer to settle. The intent is persisted, so a cancelled flow stays cancelled even if the gateway restarts before all child tasks have terminated.
 
+Use `openclaw tasks audit --json` as the preview and inspect each candidate with `openclaw tasks flow show <lookup> --json` before cancelling. Do not cancel hardware, live, safety, or owner-sensitive flows unless the owning lane or operator explicitly says the work is superseded. Already-terminal flow records should age out through `openclaw tasks maintenance --json` followed by `--apply`; do not delete Task Flow state or transcripts manually.
+
 ## CLI commands
 
 ```bash
