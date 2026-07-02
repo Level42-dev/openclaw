@@ -122,7 +122,22 @@ unbounded `registry.sqlite-wal` sidecar files.
 
 ## Cancel behavior
 
-`openclaw tasks flow cancel` sets a sticky cancel intent on the flow. Active tasks within the flow are cancelled, and no new steps are started. The cancel intent persists across restarts, so a cancelled flow stays cancelled even if the gateway restarts before all child tasks have terminated.
+`openclaw tasks flow cancel` is the supported operator path for a stale
+non-terminal flow after you have inspected the owning lane and decided the work
+is superseded or safe to stop. It sets a sticky cancel intent on the flow. Active
+tasks within the flow are cancelled, and no new steps are started. The cancel
+intent persists across restarts, so a cancelled flow stays cancelled even if the
+gateway restarts before all child tasks have terminated.
+
+Use `openclaw tasks audit --json` as the preview, then inspect each candidate
+with `openclaw tasks flow show <lookup> --json` before cancelling. Do not cancel
+hardware, live, safety, or owner-sensitive flows unless the owning issue or
+operator explicitly says that work is superseded. If a flow is already terminal
+such as `blocked`, `failed`, `succeeded`, `cancelled`, or `lost`, `cancel`
+refuses to rewrite it; use `openclaw tasks maintenance --json` to preview the
+retention/prune pass and `openclaw tasks maintenance --apply` to remove terminal
+TaskFlow records once they are old enough. Do not manually delete TaskFlow state
+or transcripts.
 
 ## CLI commands
 
@@ -133,15 +148,15 @@ openclaw tasks flow list
 # Show details for a specific flow
 openclaw tasks flow show <lookup>
 
-# Cancel a running flow and its active tasks
+# Cancel a stale non-terminal flow and its active tasks
 openclaw tasks flow cancel <lookup>
 ```
 
-| Command                           | Description                                   |
-| --------------------------------- | --------------------------------------------- |
-| `openclaw tasks flow list`        | Shows tracked flows with status and sync mode |
-| `openclaw tasks flow show <id>`   | Inspect one flow by flow id or lookup key     |
-| `openclaw tasks flow cancel <id>` | Cancel a running flow and its active tasks    |
+| Command                           | Description                                       |
+| --------------------------------- | ------------------------------------------------- |
+| `openclaw tasks flow list`        | Shows tracked flows with status and sync mode     |
+| `openclaw tasks flow show <id>`   | Inspect one flow by flow id or lookup key         |
+| `openclaw tasks flow cancel <id>` | Cancel a stale non-terminal flow and active tasks |
 
 ## How flows relate to tasks
 

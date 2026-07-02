@@ -749,7 +749,7 @@ export function registerStatusHealthSessionsCommands(program: Command) {
 
   tasksFlowCmd
     .command("cancel")
-    .description("Cancel a running TaskFlow")
+    .description("Cancel a non-terminal TaskFlow")
     .argument("<lookup>", "Flow id or owner key")
     .action(async (lookup) => {
       await runCommandWithRuntime(defaultRuntime, async () => {

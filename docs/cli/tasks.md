@@ -76,6 +76,9 @@ openclaw tasks audit [--severity <warn|error>] [--code <name>] [--limit <n>] [--
 ```
 
 Surfaces stale, lost, delivery-failed, or otherwise inconsistent task and Task Flow records. Lost tasks retained until `cleanupAfter` are warnings; expired or unstamped lost tasks are errors.
+For TaskFlow cleanup, treat this command as the dry-run/preview step: inspect
+each stale flow with `openclaw tasks flow show <lookup> --json` before any
+mutation.
 
 ### `maintenance`
 
@@ -94,6 +97,10 @@ gone, even if an old child-session row remains.
 When applied, maintenance also prunes `cron:<jobId>:run:<uuid>` session registry
 rows older than 7 days while preserving currently running cron jobs and leaving
 non-cron session rows untouched.
+Terminal TaskFlow records are pruned only after the retention window and only
+when they have no active linked tasks. Use `--json` first to preview the
+`maintenance.taskFlows.pruned` count; do not remove TaskFlow registry or
+transcript files by hand.
 
 ### `flow`
 
@@ -103,7 +110,11 @@ openclaw tasks flow show <lookup> [--json]
 openclaw tasks flow cancel <lookup>
 ```
 
-Inspects or cancels durable Task Flow state under the task ledger.
+Inspects or cancels durable Task Flow state under the task ledger. `cancel` is
+the supported cleanup path for stale non-terminal flows after the owning issue
+or operator confirms the work is superseded or safe to stop. It refuses to
+rewrite already-terminal flows such as historical `blocked` residues; those
+should be left for `openclaw tasks maintenance --apply` after a JSON preview.
 
 ## Related
 
