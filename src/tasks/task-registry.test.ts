@@ -3744,6 +3744,50 @@ describe("task-registry", () => {
     });
   });
 
+  it("cancels stale subagent registry tasks when the subagent run is already missing", async () => {
+    await withTaskRegistryTempDir(async () => {
+      hoisted.killSubagentRunAdminMock.mockResolvedValue({
+        found: false,
+        killed: false,
+      });
+
+      const task = createTaskRecord({
+        runtime: "subagent",
+        ownerKey: "agent:main:main",
+        scopeKind: "session",
+        requesterOrigin: {
+          channel: "notifychat",
+          to: "notifychat:123",
+        },
+        childSessionKey: "agent:worker:subagent:stale-child",
+        runId: "run-cancel-missing-subagent",
+        task: "Stale subagent task",
+        status: "running",
+        deliveryStatus: "pending",
+      });
+
+      const result = await cancelTaskById({
+        cfg: {} as never,
+        taskId: task.taskId,
+      });
+
+      const killArgs = firstMockArg(hoisted.killSubagentRunAdminMock, "killSubagentRunAdmin");
+      expectRecordFields(killArgs, {
+        cfg: {},
+        sessionKey: "agent:worker:subagent:stale-child",
+      });
+      expectRecordFields(result, {
+        found: true,
+        cancelled: true,
+      });
+      expectRecordFields(result.task, {
+        taskId: task.taskId,
+        status: "cancelled",
+        error: "Cancelled by operator; subagent task was not found.",
+      });
+    });
+  });
+
   it("cancels CLI-tracked tasks in the registry without ACP or subagent teardown", async () => {
     await withTaskRegistryTempDir(async () => {
       hoisted.cancelSessionMock.mockClear();

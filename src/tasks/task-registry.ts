@@ -2085,6 +2085,7 @@ export async function cancelTaskById(params: {
     };
   }
   const childSessionKey = task.childSessionKey?.trim();
+  let terminalReason = params.reason?.trim() || "Cancelled by operator.";
   try {
     if (task.runtime !== "cli") {
       if (task.runtime === "cron") {
@@ -2132,12 +2133,11 @@ export async function cancelTaskById(params: {
           sessionKey: childSessionKey,
         });
         if (!result.found || !result.killed) {
-          return {
-            found: true,
-            cancelled: false,
-            reason: result.found ? "Subagent was not running." : "Subagent task not found.",
-            task: cloneTaskRecord(task),
-          };
+          terminalReason =
+            params.reason?.trim() ||
+            (result.found
+              ? "Cancelled by operator; subagent was not running."
+              : "Cancelled by operator; subagent task was not found.");
         }
       } else {
         return {
@@ -2149,7 +2149,7 @@ export async function cancelTaskById(params: {
       }
     }
     const endedAt = Date.now();
-    const error = params.reason?.trim() || "Cancelled by operator.";
+    const error = terminalReason;
     const updated =
       task.runtime === "acp" && task.runId?.trim()
         ? (updateTaskStateByRunId({
