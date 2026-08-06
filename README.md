@@ -18,6 +18,12 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="MIT License"></a>
 </p>
 
+> [!NOTE]
+> **ClawTalk branch basis:** This branch is based on the official OpenClaw
+> [`v2026.7.1-2`](https://github.com/openclaw/openclaw/releases/tag/v2026.7.1-2) release, with 13 ClawTalk commits on top.
+> Use the [canonical release-base comparison](https://github.com/openclaw/openclaw/compare/v2026.7.1-2...Jarvis-Level42:clawtalk/base) to review it.
+> GitHub's fork banner compares against upstream `main`; its ahead/behind counts are not the relevant comparison for this release-based branch.
+
 **OpenClaw** is a _personal AI assistant_ you run on your own devices.
 It answers you on the channels you already use. It can speak and listen on macOS/iOS/Android, and can render a live Canvas you control. The Gateway is just the control plane — the product is the assistant.
 
