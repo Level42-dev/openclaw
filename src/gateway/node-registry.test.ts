@@ -189,6 +189,31 @@ describe("gateway/node-registry", () => {
     await expect(oldDisconnected).resolves.toBeInstanceOf(Error);
   });
 
+  it("omits paramsJSON from invoke events when the command has no params", async () => {
+    const registry = new NodeRegistry();
+    const frames = registerNode(registry);
+    const invocation = registry.invoke({
+      nodeId: "node-1",
+      command: "device.status",
+      timeoutMs: 1_000,
+    });
+    const request = JSON.parse(frames[0] ?? "{}") as {
+      payload?: { id?: string; paramsJSON?: unknown };
+    };
+
+    expect(request.payload).not.toHaveProperty("paramsJSON");
+    expect(
+      registry.handleInvokeResult({
+        id: request.payload?.id ?? "",
+        nodeId: "node-1",
+        connId: "conn-1",
+        ok: true,
+        payload: { sanitized: true },
+      }),
+    ).toBe(true);
+    await expect(invocation).resolves.toMatchObject({ ok: true });
+  });
+
   it("matches pending system.run events to the issuing connection", async () => {
     const registry = new NodeRegistry();
     const frames = registerLinuxNode(registry);

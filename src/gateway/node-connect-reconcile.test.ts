@@ -167,6 +167,35 @@ describe("reconcileNodePairingOnConnect", () => {
     expect(approvedPairingRequest).not.toHaveBeenCalled();
   });
 
+  it("preserves safe Voice PE defaults while reapproving extended diagnostics", async () => {
+    const commands = ["device.status", "debug.logs", "speaker.diagnostics"];
+    const requestPairing = makePendingPairingRequest("req-voice-pe");
+
+    const result = await reconcileNodePairingOnConnect({
+      cfg: {
+        gateway: {
+          nodes: { allowCommands: ["debug.logs", "speaker.diagnostics"] },
+        },
+      } as never,
+      connectParams: makeNodeConnectParams({
+        client: {
+          id: GATEWAY_CLIENT_IDS.NODE_HOST,
+          version: "test",
+          platform: "esp32-s3",
+          deviceFamily: "voice-pe",
+          mode: GATEWAY_CLIENT_MODES.NODE,
+        },
+        commands,
+      }),
+      pairedNode: makePairedNode({ commands: [] }),
+      requestPairing,
+    });
+
+    expect(result.declaredCommands).toEqual(commands);
+    expect(result.effectiveCommands).toEqual(["device.status"]);
+    expect(requestPairing).toHaveBeenCalledWith(expect.objectContaining({ commands }));
+  });
+
   it.each([
     ["conflicts with device family", { deviceFamily: "iPhone" }],
     ["omits device family", {}],

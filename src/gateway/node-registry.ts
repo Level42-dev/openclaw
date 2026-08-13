@@ -459,8 +459,7 @@ export class NodeRegistry {
       id: requestId,
       nodeId: params.nodeId,
       command: params.command,
-      paramsJSON:
-        "params" in params && invokeParams !== undefined ? JSON.stringify(invokeParams) : null,
+      ...(invokeParams !== undefined ? { paramsJSON: JSON.stringify(invokeParams) } : {}),
       timeoutMs: params.timeoutMs,
       idempotencyKey: params.idempotencyKey,
     };

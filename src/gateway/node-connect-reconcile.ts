@@ -118,13 +118,13 @@ export async function reconcileNodePairingOnConnect(params: {
   requestPairing: (input: NodePairingRequestInput) => Promise<RequestNodePairingResult | null>;
 }): Promise<NodeConnectPairingReconcileResult> {
   const nodeId = params.connectParams.device?.id ?? params.connectParams.client.id;
-  const policyNode = {
+  const nodePolicyContext = {
     platform: params.connectParams.client.platform,
     deviceFamily: params.connectParams.client.deviceFamily,
     caps: params.connectParams.caps,
     commands: params.connectParams.commands,
   };
-  const pairingAllowlist = resolveNodePairingCommandAllowlist(params.cfg, policyNode);
+  const pairingAllowlist = resolveNodePairingCommandAllowlist(params.cfg, nodePolicyContext);
   const declared = normalizeDeclaredNodeCommands({
     declaredCommands: Array.isArray(params.connectParams.commands)
       ? params.connectParams.commands
@@ -161,11 +161,16 @@ export async function reconcileNodePairingOnConnect(params: {
   }
 
   const runtimeAllowlist = resolveNodeCommandAllowlist(params.cfg, {
-    ...policyNode,
+    ...nodePolicyContext,
     approvedCommands: params.pairedNode.commands,
   });
+  // Built-in safe defaults do not need a second approval merely because an
+  // older paired snapshot predates that default. Config-only command additions
+  // remain upgrades and continue through the normal reapproval path.
+  const defaultAllowlist = resolveNodeCommandAllowlist({}, nodePolicyContext);
+  const safeDefaultCommands = declared.filter((command) => defaultAllowlist.has(command));
   const approvedCommands = resolveApprovedReconnectCommands({
-    pairedCommands: params.pairedNode.commands,
+    pairedCommands: [...(params.pairedNode.commands ?? []), ...safeDefaultCommands],
     allowlist: runtimeAllowlist,
   });
   const approvedCaps = normalizeNodeApprovalSurfaceList(params.pairedNode.caps);

@@ -127,11 +127,12 @@ const PLATFORM_DEFAULTS: Record<string, string[]> = {
     ...SYSTEM_COMMANDS,
     ...SCREEN_COMMANDS,
   ],
+  embedded: [...DEVICE_COMMANDS],
   // Fail-safe: unknown metadata should not receive host exec defaults.
   unknown: [...UNKNOWN_PLATFORM_COMMANDS],
 };
 
-type PlatformId = "ios" | "android" | "macos" | "windows" | "linux" | "unknown";
+type PlatformId = "ios" | "android" | "macos" | "windows" | "linux" | "embedded" | "unknown";
 
 const CANONICAL_PLATFORM_IDS = new Set<Exclude<PlatformId, "unknown">>([
   "ios",
@@ -139,6 +140,7 @@ const CANONICAL_PLATFORM_IDS = new Set<Exclude<PlatformId, "unknown">>([
   "macos",
   "windows",
   "linux",
+  "embedded",
 ]);
 
 const DEVICE_FAMILY_TOKEN_RULES: ReadonlyArray<{
@@ -150,6 +152,7 @@ const DEVICE_FAMILY_TOKEN_RULES: ReadonlyArray<{
   { id: "macos", tokens: ["mac"] },
   { id: "windows", tokens: ["windows"] },
   { id: "linux", tokens: ["linux"] },
+  { id: "embedded", tokens: ["voice-pe"] },
 ] as const;
 
 function resolvePlatformIdByExactMatch(value: string): Exclude<PlatformId, "unknown"> | undefined {
@@ -174,6 +177,8 @@ function platformMatchesDeviceFamily(
       return family === "windows";
     case "linux":
       return family === "linux";
+    case "embedded":
+      return family === "voice-pe";
   }
   return false;
 }
@@ -190,6 +195,9 @@ function resolvePlatformIdByNativeLabel(
   }
   if (/^android \d+(?: \(sdk \d+\))?$/.test(platform)) {
     return deviceFamily === "android" ? "android" : undefined;
+  }
+  if (platform === "esp32-s3") {
+    return deviceFamily === "voice-pe" ? "embedded" : undefined;
   }
   return undefined;
 }

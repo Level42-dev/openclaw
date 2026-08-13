@@ -85,6 +85,27 @@ describe("gateway/node-command-policy", () => {
     expect(allowlist.has("talk.ptt.start")).toBe(false);
   });
 
+  it("gives Voice PE embedded diagnostics safe defaults without granting extended diagnostics", () => {
+    const node = { platform: "esp32-s3", deviceFamily: "voice-pe" };
+    const defaults = resolveNodeCommandAllowlist({} as OpenClawConfig, node);
+
+    expect(defaults.has("device.info")).toBe(true);
+    expect(defaults.has("device.status")).toBe(true);
+    expect(defaults.has("debug.logs")).toBe(false);
+    expect(defaults.has("speaker.diagnostics")).toBe(false);
+
+    const configured = resolveNodeCommandAllowlist(
+      {
+        gateway: {
+          nodes: { allowCommands: ["debug.logs", "speaker.diagnostics"] },
+        },
+      } as OpenClawConfig,
+      node,
+    );
+    expect(configured.has("debug.logs")).toBe(true);
+    expect(configured.has("speaker.diagnostics")).toBe(true);
+  });
+
   it("allows push-to-talk commands when the node declares talk command support", () => {
     const cfg = {} as OpenClawConfig;
     const allowlist = resolveNodeCommandAllowlist(cfg, {
