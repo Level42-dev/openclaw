@@ -464,7 +464,7 @@ corepack pnpm docs:list
 
 Expected: every command exits successfully.
 
-- [ ] **Step 3: Publish only the review branch**
+- [x] **Step 3: Publish only the review branch**
 
 ```bash
 git push --set-upstream origin sync/clawtalk-base-20260904
