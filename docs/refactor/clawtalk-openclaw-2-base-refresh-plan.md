@@ -37,7 +37,7 @@
 - Consumes: current upstream GitHub workflow structure and the two optional secrets `GH_APP_PRIVATE_KEY` and `GH_APP_PRIVATE_KEY_FALLBACK`
 - Produces: workflows that use App tokens when provisioned, fall back to `github.token` in the Level42 fork, and skip costly scheduled live/provider jobs outside `openclaw/openclaw`
 
-- [ ] **Step 1: Write the failing workflow policy test**
+- [x] **Step 1: Write the failing workflow policy test**
 
 Create `test/scripts/clawtalk-fork-workflows.test.ts` with YAML-backed assertions:
 
@@ -106,17 +106,17 @@ describe("ClawTalk fork workflow policy", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and verify the current upstream workflows fail the fork contract**
+- [x] **Step 2: Run the test and verify the current upstream workflows fail the fork contract**
 
 Run:
 
 ```bash
-corepack pnpm exec vitest run --config test/vitest/vitest.unit.config.ts test/scripts/clawtalk-fork-workflows.test.ts
+corepack pnpm exec vitest run --config test/vitest/vitest.tooling.config.ts test/scripts/clawtalk-fork-workflows.test.ts
 ```
 
 Expected: FAIL because the current workflows neither expose the secret-presence environment flags nor use `github.token`, and the scheduled jobs lack the canonical-repository guard.
 
-- [ ] **Step 3: Implement optional GitHub App authentication**
+- [x] **Step 3: Implement optional GitHub App authentication**
 
 In both `auto-response.yml` and `labeler.yml`, add:
 
@@ -142,7 +142,7 @@ continue-on-error: true
 
 Append `|| github.token` to every `github-token` and `repo-token` expression fed by those two steps. Add `issues: write` to affected labeler jobs where the fallback workflow token performs issue-label writes.
 
-- [ ] **Step 4: Restrict scheduled live checks to upstream**
+- [x] **Step 4: Restrict scheduled live checks to upstream**
 
 Use these exact job conditions in `.github/workflows/openclaw-scheduled-live-checks.yml`:
 
@@ -159,18 +159,24 @@ weekly_upgrade_survivors:
     github.event.schedule == '41 6 * * 1'
 ```
 
-- [ ] **Step 5: Run focused tests and workflow lint**
+- [x] **Step 5: Run focused tests and workflow lint**
 
 Run:
 
 ```bash
-corepack pnpm exec vitest run --config test/vitest/vitest.unit.config.ts test/scripts/clawtalk-fork-workflows.test.ts
+corepack pnpm exec vitest run --config test/vitest/vitest.tooling.config.ts test/scripts/clawtalk-fork-workflows.test.ts
 corepack pnpm check:workflows
 ```
 
 Expected: the new policy test passes and workflow lint exits successfully.
 
-- [ ] **Step 6: Commit the workflow adaptation**
+Host note: this machine lacks `python3-venv`, so `check:workflows` cannot
+bootstrap its pre-commit environment. The same gate was completed with the
+repository-pinned actionlint revision in an isolated Go container, zizmor
+`1.29.0` in its official container, and the remaining repository checks
+directly on the host.
+
+- [x] **Step 6: Commit the workflow adaptation**
 
 ```bash
 git add .github/workflows/auto-response.yml .github/workflows/labeler.yml \
@@ -342,7 +348,7 @@ Expected: no merge commits, zero uncommitted changes, and only the design/plan, 
 Run:
 
 ```bash
-corepack pnpm exec vitest run --config test/vitest/vitest.unit.config.ts test/scripts/clawtalk-fork-workflows.test.ts
+corepack pnpm exec vitest run --config test/vitest/vitest.tooling.config.ts test/scripts/clawtalk-fork-workflows.test.ts
 corepack pnpm exec vitest run --config test/vitest/vitest.gateway.config.ts \
   src/gateway/talk-realtime-relay.test.ts src/gateway/server-methods/talk.test.ts
 corepack pnpm docs:list
