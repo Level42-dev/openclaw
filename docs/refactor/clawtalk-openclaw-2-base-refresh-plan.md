@@ -437,7 +437,7 @@ git commit -m "docs: record ClawTalk refresh validation"
 - Consumes: validated candidate branch
 - Produces: exact review SHA and a separate remote review branch without modifying `origin/clawtalk/base`
 
-- [ ] **Step 1: Verify branch topology and scope**
+- [x] **Step 1: Verify branch topology and scope**
 
 Run:
 
@@ -451,7 +451,7 @@ git status --short --branch
 
 Expected: no merge commits, zero uncommitted changes, and only the design/plan, workflow/test, coordination, compatibility, and validation files listed by the plan.
 
-- [ ] **Step 2: Re-run the focused release gate**
+- [x] **Step 2: Re-run the focused release gate**
 
 Run:
 
