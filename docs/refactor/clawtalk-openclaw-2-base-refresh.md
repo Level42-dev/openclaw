@@ -22,7 +22,7 @@ Gateway, modify the Voice PE repository, or provision credentials.
 - Previous fork head: `d2034cc93c44517c0267af78130bd49c86958c67`.
 - Previous release base: `v2026.7.1-2`.
 - New upstream base captured on 2026-09-04:
-  `79e20aa5d1fd83ca0823f7cc5e6d32315fc31781`.
+  `c1c21d9b0be683f7a3090a31d44b0bc04db01c84`.
 - The previous fork contains 15 commits above its release base.
 - Replaying the first historical relay commit onto the new upstream conflicts in six core
   Gateway/Talk files. The branch must therefore be reconstructed, not mechanically rebased.

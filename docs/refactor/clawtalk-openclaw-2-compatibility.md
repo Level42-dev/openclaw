@@ -10,7 +10,7 @@ title: "ClawTalk OpenClaw 2.x compatibility record"
 
 This record compares the previous `clawtalk/base` head
 `d2034cc93c44517c0267af78130bd49c86958c67` with the candidate rebuilt directly
-on upstream commit `79e20aa5d1fd83ca0823f7cc5e6d32315fc31781`.
+on upstream commit `c1c21d9b0be683f7a3090a31d44b0bc04db01c84`.
 
 The historical branch contains 15 commits above its old release basis. The new
 candidate evaluates their behavior rather than replaying their diffs.
@@ -51,8 +51,10 @@ dead/doctor-only legacy input. A Voice PE node must declare its exact command
 surface, the operator must add non-default diagnostics to `commands.allow`, and
 a widened paired command surface must be approved.
 
-The current Gateway schema permits `paramsJSON` to be absent or `null` for a
-parameterless node invocation. Firmware should accept both representations.
+The current Gateway schema permits `paramsJSON` to be a string or absent for a
+parameterless node invocation; the candidate builder now omits that field.
+Firmware may continue accepting both omission and historical `null` payloads
+for backward compatibility.
 The existing Voice PE compatibility checker still encodes the historical
 embedded-platform patch, old source-file locations, omission-only
 `paramsJSON`, and the legacy configuration name. Failures in those assertions
@@ -73,7 +75,7 @@ contract test independently reproduces a defect.
 ## Candidate validation evidence
 
 Validated implementation head:
-`8b4e5ab39aaecec2b2ca089a7b8a0fe7abb8da82`. The final review SHA also
+`21d9fc650bc4cb5a77303ced88c56d04bd5a970f`. The final review SHA also
 contains this evidence-only documentation commit and is recorded at handoff.
 
 - Fork workflow contract: 1 file, 2 tests passed.
@@ -86,7 +88,7 @@ contains this evidence-only documentation commit and is recorded at handoff.
 - Talk baseline: 2 files, 203 tests passed.
 - Generic node invoke schema regression: 2 files, 153 tests passed.
 - Core TypeScript check: `pnpm tsgo:core` passed.
-- Full build: passed in 13 minutes 40.9 seconds, including runtime, 90 external
+- Full build: passed in 8 minutes 17.1 seconds, including runtime, 90 external
   plugins, 149 public plugin-SDK subpaths, and Control UI.
 - Documentation discovery and `git diff --check`: passed.
 - The build produced no tracked worktree changes.
