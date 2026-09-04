@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Produce a current, tested Level42 ClawTalk fork candidate based directly on OpenClaw upstream commit `c1c21d9b0be683f7a3090a31d44b0bc04db01c84`.
+**Goal:** Produce a current, tested Level42 ClawTalk fork candidate based directly on OpenClaw upstream commit `e0c97ac015d95c3c660adfaaaa0dd083b317cde4`.
 
 **Architecture:** Keep the Gateway and Talk runtime identical to current upstream unless a focused compatibility test proves a generic missing capability. Re-express only fork-owned GitHub workflow safety policy, document the linear rebuild procedure, and record the disposition of every historical fork commit.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- The candidate base is exactly `c1c21d9b0be683f7a3090a31d44b0bc04db01c84`.
+- The candidate base is exactly `e0c97ac015d95c3c660adfaaaa0dd083b317cde4`.
 - Keep `clawtalk/base` linear on `upstream/main`; no merge commit may exist above the base.
 - Prefer current upstream behavior and configuration over historical fork patches.
 - Do not restore removed Talk RPCs for compatibility with existing firmware.

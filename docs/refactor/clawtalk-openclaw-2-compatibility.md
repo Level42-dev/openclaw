@@ -10,7 +10,7 @@ title: "ClawTalk OpenClaw 2.x compatibility record"
 
 This record compares the previous `clawtalk/base` head
 `d2034cc93c44517c0267af78130bd49c86958c67` with the candidate rebuilt directly
-on upstream commit `c1c21d9b0be683f7a3090a31d44b0bc04db01c84`.
+on upstream commit `e0c97ac015d95c3c660adfaaaa0dd083b317cde4`.
 
 The historical branch contains 15 commits above its old release basis. The new
 candidate evaluates their behavior rather than replaying their diffs.
@@ -75,7 +75,7 @@ contract test independently reproduces a defect.
 ## Candidate validation evidence
 
 Validated implementation head:
-`21d9fc650bc4cb5a77303ced88c56d04bd5a970f`. The final review SHA also
+`d906e016b5d1830f878dbfae2c86d15c2a93c600`. The final review SHA also
 contains this evidence-only documentation commit and is recorded at handoff.
 
 - Fork workflow contract: 1 file, 2 tests passed.
@@ -88,7 +88,7 @@ contains this evidence-only documentation commit and is recorded at handoff.
 - Talk baseline: 2 files, 203 tests passed.
 - Generic node invoke schema regression: 2 files, 153 tests passed.
 - Core TypeScript check: `pnpm tsgo:core` passed.
-- Full build: passed in 8 minutes 17.1 seconds, including runtime, 90 external
+- Full build: passed in 8 minutes 35.7 seconds, including runtime, 90 external
   plugins, 149 public plugin-SDK subpaths, and Control UI.
 - Documentation discovery and `git diff --check`: passed.
 - The build produced no tracked worktree changes.
