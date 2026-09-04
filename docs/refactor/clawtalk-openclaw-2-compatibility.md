@@ -69,3 +69,42 @@ contract test independently reproduces a defect.
   Push-to-Talk turns;
 - run attended hardware acceptance only after installing the reviewed exact
   fork SHA.
+
+## Candidate validation evidence
+
+Validated implementation head:
+`8b4e5ab39aaecec2b2ca089a7b8a0fe7abb8da82`. The final review SHA also
+contains this evidence-only documentation commit and is recorded at handoff.
+
+- Fork workflow contract: 1 file, 2 tests passed.
+- Workflow syntax/security: the repository-pinned actionlint revision passed;
+  zizmor 1.29.0 reported no findings; CI Git-owner generation, composite-action
+  interpolation, and conflict-marker checks passed.
+- Host limitation: the `check:workflows` wrapper could not bootstrap
+  pre-commit because this host lacks `python3-venv`. Its component checks were
+  run directly or in isolated official containers instead.
+- Talk baseline: 2 files, 203 tests passed.
+- Generic node invoke schema regression: 2 files, 153 tests passed.
+- Core TypeScript check: `pnpm tsgo:core` passed.
+- Full build: passed in 13 minutes 40.9 seconds, including runtime, 90 external
+  plugins, 149 public plugin-SDK subpaths, and Control UI.
+- Documentation discovery and `git diff --check`: passed.
+- The build produced no tracked worktree changes.
+
+The existing Voice PE diagnostic checker passed 5 of 11 checks and reported six
+failures. Their classifications are:
+
+| Checker assertion                                          | Classification                               | Current evidence/action                                                                                                                                                                                           |
+| ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| connect.commands schema location is supported              | Stale checker path/symbol                    | `packages/gateway-protocol/src/schema/frames.ts` accepts top-level `commands`; current reconciliation reads `connectParams.commands`.                                                                             |
+| paired command snapshot preserves safe diagnostic defaults | Configuration and pairing migration          | Current policy intentionally requires approval for a widened command surface. Configure exact diagnostics through `gateway.nodes.commands.allow`, reconnect, and approve the pending surface.                     |
+| Gateway forwards node.invoke.request fields                | Stale checker path plus resolved generic gap | Dispatch moved to `node-registry-private.ts` and payload construction to `node-invoke-request.ts`. The new generic contract test proves parameterless and session-bound builder output matches the public schema. |
+| Gateway accepts node.invoke.result payload/error objects   | Stale checker implementation shape           | `nodes.handlers.invoke-result.ts` validates normalized params through `assertValidParams` and forwards payload/error to the registry.                                                                             |
+| Voice PE gets embedded safe defaults                       | Configuration migration                      | The candidate deliberately has no device-family special case. Declare, allowlist, and approve exact Voice PE diagnostics.                                                                                         |
+| node.invoke gates declaration and allowlist                | Stale checker file boundary                  | Current gating lives in `server-methods/nodes.invoke.ts` and checks both the declared command surface and resolved runtime allowlist before dispatch.                                                             |
+
+No checker finding requires a Voice PE-specific Gateway patch. The later firmware
+phase must update the checker to inspect current file ownership and policy names.
+
+Validation captured no credentials, private network values, device identifiers,
+transcripts, raw PCM, or base64 audio.

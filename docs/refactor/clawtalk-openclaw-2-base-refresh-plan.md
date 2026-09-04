@@ -373,7 +373,7 @@ git commit -m "fix(gateway): align node invoke requests with schema"
 - Consumes: the completed workflow/doc candidate and the existing read-only Voice PE compatibility checker
 - Produces: recorded validation evidence separating obsolete checker assumptions from genuine protocol gaps
 
-- [ ] **Step 1: Verify the Talk baseline**
+- [x] **Step 1: Verify the Talk baseline**
 
 Run:
 
@@ -384,7 +384,7 @@ corepack pnpm exec vitest run --config test/vitest/vitest.gateway.config.ts \
 
 Expected: all focused Talk tests pass.
 
-- [ ] **Step 2: Run the existing Voice PE checker read-only**
+- [x] **Step 2: Run the existing Voice PE checker read-only**
 
 From `/home/openclaw/src/openclaw-voice-pe`, run:
 
@@ -395,7 +395,7 @@ node tools/voice-pe-node-diagnostics-compat.mjs \
 
 Expected: the checker may fail because it searches superseded Gateway files, requires the old embedded-platform core patch, rejects schema-valid `paramsJSON: null`, and looks for the removed `gateway.nodes.allowCommands` key. Do not modify the Voice PE repository in this phase.
 
-- [ ] **Step 3: Record sanitized validation evidence**
+- [x] **Step 3: Record sanitized validation evidence**
 
 Append a validation section to the compatibility report with:
 
@@ -408,7 +408,7 @@ Append a validation section to the compatibility report with:
 
 If a genuine generic core gap appears, stop and amend the design before changing runtime code.
 
-- [ ] **Step 4: Run type/build validation**
+- [x] **Step 4: Run type/build validation**
 
 Run:
 
@@ -419,7 +419,7 @@ NODE_OPTIONS=--max-old-space-size=12288 corepack pnpm build
 
 Expected: both commands exit successfully. A runtime-only build is not sufficient for branch replacement; if the full build cannot finish locally, preserve the failure output and require passing CI before replacement.
 
-- [ ] **Step 5: Commit validation evidence**
+- [x] **Step 5: Commit validation evidence**
 
 ```bash
 git add docs/refactor/clawtalk-openclaw-2-compatibility.md
