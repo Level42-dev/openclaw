@@ -197,7 +197,7 @@ git commit -m "ci: make upstream automation safe in Level42 fork"
 - Consumes: the design spec, upstream/fork remote names, the old head `d2034cc93c44517c0267af78130bd49c86958c67`, and the new base SHA
 - Produces: a current operator runbook and an auditable disposition for all 15 historical commits
 
-- [ ] **Step 1: Write the coordination runbook**
+- [x] **Step 1: Write the coordination runbook**
 
 Create `docs/PROJECT_COORDINATION.md` with OpenClaw doc frontmatter and these enforceable rules:
 
@@ -212,7 +212,7 @@ Create `docs/PROJECT_COORDINATION.md` with OpenClaw doc frontmatter and these en
 - replace `origin/clawtalk/base` only with explicit approval and `--force-with-lease`;
 - install a detached exact reviewed SHA with automatic source updates disabled.
 
-- [ ] **Step 2: Record all historical commit dispositions**
+- [x] **Step 2: Record all historical commit dispositions**
 
 Create `docs/refactor/clawtalk-openclaw-2-compatibility.md` with a table containing every commit below exactly once:
 
@@ -236,7 +236,7 @@ Create `docs/refactor/clawtalk-openclaw-2-compatibility.md` with a table contain
 
 Also explain that current configuration uses `gateway.nodes.commands.allow`, node command changes require pairing approval, and the existing Voice PE checker still encodes obsolete file paths and `gateway.nodes.allowCommands` assumptions.
 
-- [ ] **Step 3: Validate documentation**
+- [x] **Step 3: Validate documentation**
 
 Run:
 
@@ -247,7 +247,7 @@ git diff --check
 
 Expected: both commands exit successfully.
 
-- [ ] **Step 4: Commit the coordination and compatibility docs**
+- [x] **Step 4: Commit the coordination and compatibility docs**
 
 ```bash
 git add docs/PROJECT_COORDINATION.md docs/refactor/clawtalk-openclaw-2-compatibility.md
