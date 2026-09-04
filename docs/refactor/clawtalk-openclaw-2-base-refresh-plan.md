@@ -254,7 +254,115 @@ git add docs/PROJECT_COORDINATION.md docs/refactor/clawtalk-openclaw-2-compatibi
 git commit -m "docs: define current ClawTalk fork coordination"
 ```
 
-### Task 3: Candidate compatibility and runtime validation
+### Task 3: Align node.invoke.request builder and public schema
+
+**Files:**
+
+- Create: `src/gateway/node-invoke-request.test.ts`
+- Modify: `src/gateway/node-invoke-request.ts`
+- Modify: `packages/gateway-protocol/src/schema/nodes.ts`
+
+**Interfaces:**
+
+- Consumes: `buildNodeInvokeRequest(...)` and `NodeInvokeRequestEventSchema`
+- Produces: schema-valid parameterless and session-bound node invoke request events without changing authorization or pairing policy
+
+- [x] **Step 1: Write failing generic schema contract tests**
+
+Create `src/gateway/node-invoke-request.test.ts`:
+
+```ts
+import { Value } from "typebox/value";
+import { describe, expect, it } from "vitest";
+import { NodeInvokeRequestEventSchema } from "../../packages/gateway-protocol/src/schema/nodes.js";
+import { buildNodeInvokeRequest } from "./node-invoke-request.js";
+
+describe("buildNodeInvokeRequest", () => {
+  it("omits paramsJSON when an invocation has no params", () => {
+    const payload = buildNodeInvokeRequest({
+      id: "invoke-1",
+      nodeId: "node-1",
+      command: "device.status",
+      timeoutMs: 30_000,
+    });
+
+    expect(payload).not.toHaveProperty("paramsJSON");
+    expect(Value.Check(NodeInvokeRequestEventSchema, payload)).toBe(true);
+  });
+
+  it("keeps a normalized sessionKey inside the public event schema", () => {
+    const payload = buildNodeInvokeRequest({
+      id: "invoke-2",
+      nodeId: "node-1",
+      command: "system.run",
+      params: { command: ["echo", "ok"] },
+      timeoutMs: 30_000,
+      sessionKey: " agent:main:main ",
+    });
+
+    expect(payload.sessionKey).toBe("agent:main:main");
+    expect(Value.Check(NodeInvokeRequestEventSchema, payload)).toBe(true);
+  });
+});
+```
+
+- [x] **Step 2: Run RED and confirm both mismatches**
+
+Run:
+
+```bash
+corepack pnpm exec vitest run --config test/vitest/vitest.gateway.config.ts src/gateway/node-invoke-request.test.ts
+```
+
+Expected: the parameterless case fails because `paramsJSON` is `null`, and the
+session-bound case fails because the closed event schema lacks `sessionKey`.
+
+- [x] **Step 3: Implement the minimal builder/schema alignment**
+
+In `buildNodeInvokeRequest`, normalize `sessionKey` once and construct optional
+fields conditionally:
+
+```ts
+const sessionKey = normalizeOptionalString(params.sessionKey);
+return {
+  id: params.id,
+  nodeId: params.nodeId,
+  command: params.command,
+  ...(params.params === undefined ? {} : { paramsJSON: JSON.stringify(params.params) }),
+  timeoutMs: params.timeoutMs,
+  idempotencyKey: params.idempotencyKey,
+  ...(sessionKey ? { sessionKey } : {}),
+};
+```
+
+Add the optional field to `NodeInvokeRequestEventSchema`:
+
+```ts
+sessionKey: Type.Optional(NonEmptyString),
+```
+
+- [x] **Step 4: Run GREEN and focused node invoke regression tests**
+
+Run:
+
+```bash
+corepack pnpm exec vitest run --config test/vitest/vitest.gateway.config.ts \
+  src/gateway/node-invoke-request.test.ts src/gateway/node-registry.test.ts
+```
+
+Expected: both test files pass.
+
+- [x] **Step 5: Commit the generic protocol fix**
+
+```bash
+git add src/gateway/node-invoke-request.test.ts src/gateway/node-invoke-request.ts \
+  packages/gateway-protocol/src/schema/nodes.ts \
+  docs/refactor/clawtalk-openclaw-2-base-refresh.md \
+  docs/refactor/clawtalk-openclaw-2-base-refresh-plan.md
+git commit -m "fix(gateway): align node invoke requests with schema"
+```
+
+### Task 4: Candidate compatibility and runtime validation
 
 **Files:**
 
@@ -318,7 +426,7 @@ git add docs/refactor/clawtalk-openclaw-2-compatibility.md
 git commit -m "docs: record ClawTalk refresh validation"
 ```
 
-### Task 4: Final branch integrity and review handoff
+### Task 5: Final branch integrity and review handoff
 
 **Files:**
 

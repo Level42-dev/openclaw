@@ -86,6 +86,20 @@ The reconstructed branch contains:
    deferred;
 5. no Voice PE-specific Gateway runtime patch unless a failing contract test demonstrates the need.
 
+## Generic node invoke schema alignment
+
+Validation against the current Voice PE diagnostic client exposed one generic
+Gateway protocol mismatch that is in scope for the rebuilt base. The
+`node.invoke.request` builder emits `paramsJSON: null` for a parameterless
+request even though `NodeInvokeRequestEventSchema` allows only a string or an
+absent field. The builder can also forward a normalized `sessionKey`, while the
+closed event schema does not declare that field.
+
+This is not a Voice PE device-family exception. Add a generic contract test that
+checks builder output against the public event schema, omit `paramsJSON` when no
+params exist, and declare optional non-empty `sessionKey` in the event schema.
+No node authorization, pairing, platform defaults, or Talk behavior changes.
+
 ## Validation
 
 Before the branch can replace `clawtalk/base`:

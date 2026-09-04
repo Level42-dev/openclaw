@@ -9,14 +9,15 @@ export function buildNodeInvokeRequest(params: {
   idempotencyKey?: string;
   sessionKey?: string;
 }) {
+  const sessionKey = normalizeOptionalString(params.sessionKey);
   return {
     id: params.id,
     nodeId: params.nodeId,
     command: params.command,
-    paramsJSON: params.params === undefined ? null : JSON.stringify(params.params),
+    ...(params.params === undefined ? {} : { paramsJSON: JSON.stringify(params.params) }),
     timeoutMs: params.timeoutMs,
     idempotencyKey: params.idempotencyKey,
-    sessionKey: normalizeOptionalString(params.sessionKey),
+    ...(sessionKey ? { sessionKey } : {}),
   };
 }
 
